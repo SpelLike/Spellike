@@ -4,7 +4,7 @@
 
 class Projectile extends Entity {
     constructor(x, y, angle, damage, speed, range, owner, effects = [], runeData = {}) {
-        super(x, y, 8, 8);
+        super(x, y, 6, 6); // Smaller, more precise hitbox
         this.startX = x;
         this.startY = y;
         this.angle = angle;
@@ -140,55 +140,55 @@ class Projectile extends Entity {
         const knockbackAngle = this.angle;
         const knockbackForce = 100;
 
-// Track last hit source (for on-death procs)
-try { target._lastHitOwner = this.owner; } catch (e) {}
+        // Track last hit source (for on-death procs)
+        try { target._lastHitOwner = this.owner; } catch (e) { }
 
-// Relics / set modifiers (player-only)
-if (this.owner === 'player' && window.Game && Game.player) {
-    // Precision Lens: more damage with distance (up to +35%)
-    if (Game.player.precisionLens) {
-        const d = Utils.distance(Game.player.centerX, Game.player.centerY, target.centerX, target.centerY);
-        const bonus = Math.min(0.35, (d / 500) * 0.35);
-        finalDamage = Math.floor(finalDamage * (1 + bonus));
-    }
-
-    // Hunter Mark: first hit marks target for 4s (+50% damage taken)
-    if (Game.hasRelic && Game.hasRelic('hunter_mark')) {
-        const canMark = (!Game.relicState.hunterMarkTargetId) || (Game.relicState.hunterMarkTimer <= 0);
-        if (canMark) {
-            target.markedTimer = 4;
-            target.markedDamageMult = 1.5;
-            Game.relicState.hunterMarkTargetId = target._id || 0;
-            Game.relicState.hunterMarkTimer = 4;
-            ParticleSystem.burst(target.centerX, target.centerY, 10, { color: '#ffee58', life: 0.4, size: 4, speed: 2 });
-        }
-    }
-
-    // Reaction Gauntlet: every 5 hits, next hit explodes (internal CD via charged flag)
-    if (Game.hasRelic && Game.hasRelic('reaction_gauntlet')) {
-        if (!Game.relicState.reactionCharged) {
-            Game.relicState.hitCount = (Game.relicState.hitCount || 0) + 1;
-            if (Game.relicState.hitCount >= 5) {
-                Game.relicState.hitCount = 0;
-                Game.relicState.reactionCharged = true;
+        // Relics / set modifiers (player-only)
+        if (this.owner === 'player' && window.Game && Game.player) {
+            // Precision Lens: more damage with distance (up to +35%)
+            if (Game.player.precisionLens) {
+                const d = Utils.distance(Game.player.centerX, Game.player.centerY, target.centerX, target.centerY);
+                const bonus = Math.min(0.35, (d / 500) * 0.35);
+                finalDamage = Math.floor(finalDamage * (1 + bonus));
             }
-        } else {
-            // Trigger explosion on this hit
-            Game.relicState.reactionCharged = false;
-            if (allEnemies) {
-                ParticleSystem.burst(target.centerX, target.centerY, 26, { color: '#ff884d', life: 0.45, size: 5, speed: 4 });
-                AudioManager.play('hit');
-                for (const e of allEnemies) {
-                    if (!e || !e.active || e === target) continue;
-                    const d2 = Utils.distance(target.centerX, target.centerY, e.centerX, e.centerY);
-                    if (d2 <= 70) {
-                        e.takeDamage(Math.max(2, Math.floor(finalDamage * 0.6)), 0, 60);
+
+            // Hunter Mark: first hit marks target for 4s (+50% damage taken)
+            if (Game.hasRelic && Game.hasRelic('hunter_mark')) {
+                const canMark = (!Game.relicState.hunterMarkTargetId) || (Game.relicState.hunterMarkTimer <= 0);
+                if (canMark) {
+                    target.markedTimer = 4;
+                    target.markedDamageMult = 1.5;
+                    Game.relicState.hunterMarkTargetId = target._id || 0;
+                    Game.relicState.hunterMarkTimer = 4;
+                    ParticleSystem.burst(target.centerX, target.centerY, 10, { color: '#ffee58', life: 0.4, size: 4, speed: 2 });
+                }
+            }
+
+            // Reaction Gauntlet: every 5 hits, next hit explodes (internal CD via charged flag)
+            if (Game.hasRelic && Game.hasRelic('reaction_gauntlet')) {
+                if (!Game.relicState.reactionCharged) {
+                    Game.relicState.hitCount = (Game.relicState.hitCount || 0) + 1;
+                    if (Game.relicState.hitCount >= 5) {
+                        Game.relicState.hitCount = 0;
+                        Game.relicState.reactionCharged = true;
+                    }
+                } else {
+                    // Trigger explosion on this hit
+                    Game.relicState.reactionCharged = false;
+                    if (allEnemies) {
+                        ParticleSystem.burst(target.centerX, target.centerY, 26, { color: '#ff884d', life: 0.45, size: 5, speed: 4 });
+                        AudioManager.play('hit');
+                        for (const e of allEnemies) {
+                            if (!e || !e.active || e === target) continue;
+                            const d2 = Utils.distance(target.centerX, target.centerY, e.centerX, e.centerY);
+                            if (d2 <= 70) {
+                                e.takeDamage(Math.max(2, Math.floor(finalDamage * 0.6)), 0, 60);
+                            }
+                        }
                     }
                 }
             }
         }
-    }
-}
 
         const killed = target.takeDamage(finalDamage, knockbackAngle, knockbackForce);
 
@@ -247,20 +247,20 @@ if (this.owner === 'player' && window.Game && Game.player) {
                     killed: !!killed
                 });
             }
-        } catch (e) {}
+        } catch (e) { }
 
 
-// Fragmentation Core: on kill, 25% chance to spawn 3 homing fragments
-if (killed && this.owner === 'player' && window.Game && Game.player && Game.hasRelic && Game.hasRelic('fragmentation_core')) {
-    if (Math.random() < 0.25 && allEnemies) {
-        for (let i = 0; i < 3; i++) {
-            const a3 = Utils.random(0, Math.PI * 2);
-            const dmg3 = Math.max(2, Math.floor(finalDamage * 0.35));
-            Game.spawnProjectile(target.centerX, target.centerY, a3, dmg3, 260, 420, 'player', ['homing'], {});
+        // Fragmentation Core: on kill, 25% chance to spawn 3 homing fragments
+        if (killed && this.owner === 'player' && window.Game && Game.player && Game.hasRelic && Game.hasRelic('fragmentation_core')) {
+            if (Math.random() < 0.25 && allEnemies) {
+                for (let i = 0; i < 3; i++) {
+                    const a3 = Utils.random(0, Math.PI * 2);
+                    const dmg3 = Math.max(2, Math.floor(finalDamage * 0.35));
+                    Game.spawnProjectile(target.centerX, target.centerY, a3, dmg3, 260, 420, 'player', ['homing'], {});
+                }
+                ParticleSystem.burst(target.centerX, target.centerY, 12, { color: '#b388ff', life: 0.4, size: 4, speed: 3 });
+            }
         }
-        ParticleSystem.burst(target.centerX, target.centerY, 12, { color: '#b388ff', life: 0.4, size: 4, speed: 3 });
-    }
-}
 
         // Explosion on hit
         if (this.explodes && allEnemies) {
@@ -316,7 +316,7 @@ if (killed && this.owner === 'player' && window.Game && Game.player && Game.hasR
     doChain(enemies) {
         // Find nearest enemy not yet hit
         let nearest = null;
-        let nearestDist = 150; // Chain range
+        let nearestDist = 100; // Reduced chain range
 
         for (const enemy of enemies) {
             if (!enemy.active || this.hitTargets.has(enemy)) continue;
@@ -335,7 +335,7 @@ if (killed && this.owner === 'player' && window.Game && Game.player && Game.hasR
             });
 
             // Deal chain damage
-            const chainDamage = Math.floor(this.baseDamage * 0.6);
+            const chainDamage = Math.floor(this.baseDamage * 0.4); // Reduced damage
             nearest.takeDamage(chainDamage, 0, 30);
             this.hitTargets.add(nearest);
             this.chainRemaining--;
@@ -350,38 +350,38 @@ if (killed && this.owner === 'player' && window.Game && Game.player && Game.hasR
     }
 
     doSplit() {
-    // Spawn child projectiles in a spread (inherit effects except split)
-    const spreadAngle = Math.PI / 5; // ~36 degree spread (tighter so it feels consistent)
-    const startAngle = this.angle - spreadAngle / 2;
-    const angleStep = (this.splitCount > 1) ? (spreadAngle / (this.splitCount - 1)) : 0;
+        // Spawn child projectiles in a spread (inherit effects except split)
+        const spreadAngle = Math.PI / 5; // ~36 degree spread (tighter so it feels consistent)
+        const startAngle = this.angle - spreadAngle / 2;
+        const angleStep = (this.splitCount > 1) ? (spreadAngle / (this.splitCount - 1)) : 0;
 
-    const childEffects = (this.effects || []).filter(e => e !== 'split');
-    const childRuneData = Object.assign({}, this.runeData || {}, { isChild: true });
+        const childEffects = (this.effects || []).filter(e => e !== 'split');
+        const childRuneData = Object.assign({}, this.runeData || {}, { isChild: true });
 
-    // Spawn from projectile center but using top-left coordinates (8x8) to avoid out-of-bounds culling
-    const sx = this.centerX - (this.width / 2);
-    const sy = this.centerY - (this.height / 2);
+        // Spawn from projectile center but using top-left coordinates (8x8) to avoid out-of-bounds culling
+        const sx = this.centerX - (this.width / 2);
+        const sy = this.centerY - (this.height / 2);
 
-    for (let i = 0; i < this.splitCount; i++) {
-        const childAngle = (this.splitCount === 1) ? this.angle : (startAngle + angleStep * i);
-        const childDamage = Math.max(1, Math.floor(this.baseDamage * 0.4));
+        for (let i = 0; i < this.splitCount; i++) {
+            const childAngle = (this.splitCount === 1) ? this.angle : (startAngle + angleStep * i);
+            const childDamage = Math.max(1, Math.floor(this.baseDamage * 0.4));
 
-        ProjectileManager.spawn(
-            sx,
-            sy,
-            childAngle,
-            childDamage,
-            this.speed * 0.85,
-            this.range * 0.55,
-            this.owner,
-            childEffects,
-            childRuneData
-        );
+            ProjectileManager.spawn(
+                sx,
+                sy,
+                childAngle,
+                childDamage,
+                this.speed * 0.85,
+                this.range * 0.55,
+                this.owner,
+                childEffects,
+                childRuneData
+            );
+        }
+
+        // Small visual to make the split obvious
+        try { ParticleSystem.burst(this.centerX, this.centerY, 8, { color: '#b388ff', life: 0.25, size: 3, speed: 2.5 }); } catch (e) { }
     }
-
-    // Small visual to make the split obvious
-    try { ParticleSystem.burst(this.centerX, this.centerY, 8, { color: '#b388ff', life: 0.25, size: 3, speed: 2.5 }); } catch (e) {}
-}
 
     applyEffect(effect, target) {
         switch (effect) {
@@ -441,7 +441,7 @@ const ProjectileManager = {
                         const d = Utils.distance(proj.centerX, proj.centerY, player.centerX, player.centerY);
                         if (d > (dark.radius + 2)) proj.active = false;
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
 
             // Check room bounds
@@ -457,7 +457,7 @@ const ProjectileManager = {
                     if (Utils.rectCollision(proj.bounds, bb)) {
                         b.active = false;
                         proj.active = false;
-                        try { if (typeof room.explodeAt === 'function') room.explodeAt(b.x + b.w/2, b.y + b.h/2, 120, 28, player, { source: 'barrel' }); } catch (e) {}
+                        try { if (typeof room.explodeAt === 'function') room.explodeAt(b.x + b.w / 2, b.y + b.h / 2, 120, 28, player, { source: 'barrel' }); } catch (e) { }
                         break;
                     }
                 }

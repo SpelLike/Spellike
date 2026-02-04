@@ -18,7 +18,7 @@ const RuneDatabase = {
         { id: 'mana_sip', name: 'Sorbo de Maná', icon: '🥤', desc: '+15% regen de maná', manaRegen: 0.15 },
         { id: 'reach', name: 'Alcance', icon: '📏', desc: '+20% rango de proyectil', rangeBonus: 0.2 },
         { id: 'twin_spark', name: 'Chispas Gemelas', icon: '⚡', desc: '+1 daño y +10% velocidad proyectil', damageBonus: 1, speedBonus: 10 },
-        { id: 'frugal', name: 'Frugal', icon: '🪙', desc: '-1 costo de maná por disparo', manaCost: -1 },
+        { id: 'frugal', name: 'Frugal', icon: '💧', desc: '-1 costo de maná por disparo', manaCost: -1 },
         { id: 'arcane_edge', name: 'Filo Arcano', icon: '🗡️', desc: '+6 daño contra enemigos élite', damageBonus: 2 },
         { id: 'glimmer', name: 'Destello', icon: '✨', desc: '+1 maná máximo y +5% daño', manaBonus: 1, damageMultiplier: 1.05 }
     ],

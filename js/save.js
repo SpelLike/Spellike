@@ -99,6 +99,7 @@ const SaveManager = {
             activeSlots: (player.activeItems && player.activeItems.length) ? player.activeItems.length : 1,
             activeItems: (player.activeItems || []).map(a => a ? { id: a.id, name: a.name, icon: a.icon } : null),
             perks: player.perks.map(p => ({ id: p.id, name: p.name })),
+            passiveItems: (player.passiveItems || []).map(it => ({ id: it.id, name: it.name, icon: it.icon, rarity: it.rarity, setId: it.setId, setPiece: it.setPiece })),
             stats: { ...player.stats }
         };
     },
@@ -154,6 +155,29 @@ const SaveManager = {
                 player.activeItems[i] = fullItem ? { ...fullItem } : a;
             }
         });
+
+        // Passive Items
+        player.passiveItems = [];
+        (saveData.passiveItems || []).forEach(p => {
+            const fullItem = ItemDatabase.get(p.id);
+            // If full item exists, use it to get latest stats/methods, but preserve saved props if needed
+            // Actually, just re-fetching from DB is usually safest for static items.
+            if (fullItem) {
+                player.passiveItems.push({ ...fullItem });
+            } else {
+                // Fallback if item removed from DB
+                player.passiveItems.push(p);
+            }
+        });
+        // Re-apply passives logic? 
+        // In many games, you might need to re-run 'onPickup' logic.
+        // But here, stats are already saved in player.stats/damage/etc.
+        // However, some passives might have continuous effects or flags.
+        // Ideally, we trust the saved stats, but sets need to be re-calculated.
+        // game.js applySetBonuses calls it every frame/update or once?
+        // Let's ensure we don't double-apply stats if they are permanent.
+        // If stats are saved (damage, speed etc), we DON'T need to re-apply "onPickup" stats.
+        // But we DO need the items in the list for the UI AND for Set Bonuses.
 
     },
 

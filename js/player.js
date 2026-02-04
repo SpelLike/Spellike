@@ -151,7 +151,7 @@ class Player extends Entity {
                         Game.spawnProjectile(this.centerX, this.centerY, aS, Math.max(3, Math.floor(this.calculateDamage() * 0.45)), this.getProjectileSpeed() * 1.05, 480, 'player', ['chain'], { chainCount: 1 });
                         ParticleSystem.burst(this.centerX, this.centerY, 10, { color: '#b3e5fc', life: 0.35, size: 3, speed: 2 });
                     }
-                } catch (e) {}
+                } catch (e) { }
 
                 // Dash echo shot (NG relic)
                 try {
@@ -160,7 +160,7 @@ class Player extends Entity {
                         Game.spawnProjectile(this.centerX, this.centerY, a, Math.max(3, Math.floor(this.calculateDamage() * 0.55)), this.getProjectileSpeed() * 0.95, 520, 'player', [], {});
                         ParticleSystem.burst(this.centerX, this.centerY, 8, { color: '#b388ff', life: 0.35, size: 3, speed: 2 });
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
         } else {
             // Normal movement
@@ -280,8 +280,11 @@ class Player extends Entity {
         this.aimAngle = Utils.angle(this.centerX, this.centerY, mouseWorld.x, mouseWorld.y);
 
         // Shoot when clicking
+        // Prevent shooting if hovering UI (and prevent if UI check exists)
+        const uiBlocked = (window.UI && typeof UI.shouldPreventShooting === 'function') ? UI.shouldPreventShooting() : false;
+
         const manaCost = this.getManaCost();
-        if (Input.isMouseDown(0) && this.fireTimer <= 0 && !this.isDashing && this.mana >= manaCost) {
+        if (Input.isMouseDown(0) && this.fireTimer <= 0 && !this.isDashing && this.mana >= manaCost && !uiBlocked) {
             this.mana -= manaCost;
             this.shoot(mouseWorld);
         }
@@ -313,7 +316,7 @@ class Player extends Entity {
     }
 
     shoot(targetPos) {
-                this.fireTimer = this.getEffectiveFireRate();
+        this.fireTimer = this.getEffectiveFireRate();
 
         // Calculate angle to mouse click position
         const angle = Utils.angle(this.centerX, this.centerY, targetPos.x, targetPos.y);
@@ -323,7 +326,7 @@ class Player extends Entity {
             if (window.RuneScript) {
                 RuneScript.trigger('OnCast', { player: this, room: (window.Game && Game.dungeon ? Game.dungeon.getCurrentRoom() : null), angle });
             }
-        } catch (e) {}
+        } catch (e) { }
 
 
         // Update direction based on shooting
@@ -355,7 +358,7 @@ class Player extends Entity {
         const angleStep = projectileCount > 1 ? spreadAngle / (projectileCount - 1) : 0;
 
         // Calculate projectile range with bonuses
-                let finalRange = this.projectileRange * this.projectileRangeMult;
+        let finalRange = this.projectileRange * this.projectileRangeMult;
         for (const rune of this.runes) {
             if (rune && rune.rangeBonus) finalRange *= (1 + rune.rangeBonus);
             if (rune && rune.rangeMultiplier) finalRange *= rune.rangeMultiplier;
@@ -438,6 +441,25 @@ class Player extends Entity {
         this.dashCooldownTimer = this.dashCooldown;
         this.iFrameTimer = this.dashDuration + 0.1;
 
+        // Tormenta Set Bonus (3 pieces): Dash shoots lightning backwards
+        if (this.setStormDash) {
+            const angle = this.dashDirection.angle() + Math.PI;
+            const dmg = Math.ceil(this.damage * 1.5);
+            const p = ProjectileManager.spawn(
+                this.centerX, this.centerY,
+                angle,
+                dmg,
+                450,
+                300,
+                'player',
+                ['chain'],
+                { chainCount: 3, color: '#00e5ff' }
+            );
+            p.color = '#00e5ff';
+            // Visual flair
+            ParticleSystem.burst(this.centerX, this.centerY, 10, { color: '#00e5ff', speed: 2 });
+        }
+
         AudioManager.play('dash');
     }
 
@@ -473,7 +495,7 @@ class Player extends Entity {
             if (window.RuneScript) {
                 RuneScript.trigger('OnDamageTaken', { player: this, room: (window.Game && Game.dungeon ? Game.dungeon.getCurrentRoom() : null), amount });
             }
-        } catch (e) {}
+        } catch (e) { }
 
 
         if (this.hp <= 0) {
@@ -495,7 +517,7 @@ class Player extends Entity {
             if (window.Meta && typeof Meta.recordGold === 'function') {
                 Meta.recordGold(n);
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     ensureRuneSlots(count) {
@@ -632,7 +654,7 @@ class Player extends Entity {
         try {
             const already = this.passiveItems.find(p => p && p.id === item.id);
             if (already) return;
-        } catch (e) {}
+        } catch (e) { }
         if (this.passiveItems.length < 10) {
             this.passiveItems.push({
                 id: item.id,

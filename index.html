@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SpelLike - Roguelike</title>
+    <!-- App icon (replaces the default "globe" icon in the tab/window) -->
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/favicon.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="assets/favicon.png">
     <meta name="description"
         content="Un roguelike infinito donde combinas runas para crear builds devastadores mientras conquistas mazmorras procedurales.">
     <link rel="stylesheet" href="css/style.css">
@@ -36,12 +39,53 @@
                 <button class="menu-btn" id="btn-quit">
                     <span class="btn-icon">🚪</span> SALIR
                 </button>
+                <button class="menu-btn" id="btn-updates">
+                    <span class="btn-icon">📝</span> NOVEDADES
+                </button>
             </div>
             <div id="audio-unlock-hint" class="audio-hint">
                 🔊 Activar música: hacé <b>click</b> o presioná <b>una tecla</b>.
             </div>
-            <div class="version">v0.1.0 Early Access</div>
+            <div class="version">v0.1.1 Early Access</div>
         </div>
+    </div>
+
+    <!-- Updates Screen -->
+    <div id="updates-screen" class="screen">
+        <div class="menu-background"></div>
+        <div class="screen-header">
+            <h2>📝 ACTUALIZACIONES</h2>
+        </div>
+        <div class="updates-list">
+            <div class="update-entry">
+                <h3>v0.1.1 - Early Access</h3>
+                <ul>
+                    <li>✨ [HUD] Interfaz totalmente rediseñada.</li>
+                    <li>✨ [Info] Nuevo panel (arriba-izquierda): Bioma, Sala y Eventos activos.</li>
+                    <li>✨ [Items] Panel derecho con ítems pasivos y colores de rareza.</li>
+                    <li>✨ [Minimap] Leyenda bajo el minimapa (Tienda, Jefe, Completado, etc.).</li>
+                    <li>✨ [Eventos] Los eventos ahora muestran nombres en español (sin códigos internos).</li>
+                    <li>🛡️ [Gameplay] Invencibilidad temporal al entrar a salas (anti-daño instantáneo).</li>
+                    <li>🧩 [Runas] Al hacer click para ver runas, el personaje ya no dispara.</li>
+                    <li>⚖️ [Economía] Arreglado el costo de las Runas Vacías.</li>
+                    <li>⚖️ [Economía] El precio de las runas ahora escala según rareza.</li>
+                    <li>🛡️ [Balance] Nerfeo al daño de rayo en cadena (-40%).</li>
+                    <li>⚔️ [Dificultad] Desafío Infinito: gran pico de dificultad en runs largas.</li>
+                    <li>⚔️ [Dificultad] Activación: después de derrotar al 3.er Jefe.</li>
+                    <li>⚔️ [Dificultad] Escalado: cada jefe extra multiplica HP enemigos x2 y Daño x1.2.</li>
+                    <li>🐛 [Bug] Sistema de guardado: los ítems recolectados ya no desaparecen al recargar.</li>
+                    <li>🐛 [Bug] Pausa: ESC vuelve a reanudar correctamente (sin doble ESC).</li>
+                    <li>🐛 [Bug] Contador de Bioma actualizado correctamente tras derrotar un jefe.</li>
+                    <li>🐛 [Bug] Recompensas dobles: removida la pantalla extra al entrar a un nuevo bioma.</li>
+                    <li>🐛 [Bug] Eventos: ya no aparecen como "---" cuando están activos.</li>
+                    <li>🐛 [Bug] Hitboxes de proyectiles más precisas.</li>
+                    <li>🎯 [Boss] Patrones de balas más justos (más espacio para esquivar).</li>
+                    <li>🛡️ [Feedback] Anti-spam en Feedback (evita envíos repetidos).</li>
+                    <li>✅ [Feedback] Cualquier bug, problema o recomendación no dudes en enviarlo al Feedback y lo arreglaré.</li>
+                </ul>
+            </div>
+        </div>
+        <button class="back-btn" id="btn-back-updates">← VOLVER</button>
     </div>
 
     <!-- Feedback Screen -->
@@ -50,7 +94,8 @@
             <h2>💬 FEEDBACK</h2>
         </div>
         <div class="feedback-content">
-            <p class="feedback-hint">Usá esto para reportar bugs o tirar ideas. Podés copiar el texto y pegarlo en el chat.</p>
+            <p class="feedback-hint">Usá esto para reportar bugs o tirar ideas. Podés copiar el texto y pegarlo en el
+                chat.</p>
 
             <div class="feedback-row">
                 <label for="feedback-type">Tipo</label>
@@ -64,7 +109,8 @@
 
             <div class="feedback-row">
                 <label for="feedback-text">Detalle</label>
-                <textarea id="feedback-text" rows="8" placeholder="Ej: Sala 4, boss Golem, el láser se queda clavado... Pasos para reproducir: 1) ... 2) ... Resultado esperado: ... Resultado obtenido: ..."></textarea>
+                <textarea id="feedback-text" rows="8"
+                    placeholder="Ej: Sala 4, boss Golem, el láser se queda clavado... Pasos para reproducir: 1) ... 2) ... Resultado esperado: ... Resultado obtenido: ..."></textarea>
             </div>
 
             <div class="feedback-actions">
@@ -268,30 +314,78 @@
     <div id="game-screen" class="screen">
         <canvas id="game-canvas"></canvas>
         <!-- HUD -->
+        <!-- HUD New Layout -->
         <div id="hud">
-            <div class="hud-left">
-                <div class="health-bar">
-                    <div class="bar-fill" id="health-fill"></div>
-                    <span class="bar-text" id="health-text">100/100</span>
+            <div id="game-ui">
+                <!-- Top Left: Vitals + Biome/Sala -->
+                <div class="hud-section top-left">
+                    <div class="vital-bar-container">
+                        <span class="bar-label">VIDA</span>
+                        <div class="vital-bar health">
+                            <div class="bar-fill" id="health-fill"></div>
+                            <span class="bar-text" id="health-text">100/100</span>
+                        </div>
+                    </div>
+                    <div class="vital-bar-container">
+                        <span class="bar-label">💧 MANÁ</span>
+                        <div class="vital-bar mana">
+                            <div class="bar-fill" id="mana-fill"></div>
+                            <span class="bar-text" id="mana-text">50/50</span>
+                        </div>
+                    </div>
+                    <!-- Biome / Sala Info -->
+                    <div class="biome-sala-info" id="biome-sala-info">
+                        <div class="info-row">
+                            <span>Bioma: <span id="biome-display">1/12</span></span>
+                            <span>Sala: <span id="room-num-display">1/8</span></span>
+                        </div>
+                        <div class="event-row" id="event-row">
+                            <span class="event-label">Evento:</span>
+                            <span class="event-name" id="event-name">Ninguno</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="mana-bar">
-                    <div class="bar-fill" id="mana-fill"></div>
-                    <span class="bar-text" id="mana-text">50/50</span>
+
+                <!-- Top Right: Gold only -->
+                <div class="hud-section top-right">
+                    <div class="stat-pill gold" id="gold-display">💰 0</div>
                 </div>
-            </div>
-            <div class="hud-center">
-                <div class="runes-display" id="runes-display">
-                    <div class="rune-slot empty"></div>
-                    <div class="rune-slot empty"></div>
-                    <div class="rune-slot empty"></div>
-                    <div class="rune-slot empty"></div>
-                    <div class="rune-slot empty"></div>
+
+                <!-- Bottom Center: Skills & Runes -->
+                <div class="hud-section bottom-center">
+                    <div class="runes-container" id="runes-display">
+                        <!-- Runes generated by JS -->
+                    </div>
+                    <div class="skills-container">
+                        <div class="skill-slot" id="dash-slot">
+                            <div class="skill-icon">👟</div>
+                            <div class="cooldown-overlay" id="dash-cooldown-fill"></div>
+                            <span class="key-hint">SPACE</span>
+                        </div>
+                        <div class="skill-slot" id="active-slot-0">
+                            <div class="skill-icon empty"></div>
+                            <div class="cooldown-overlay"></div>
+                            <span class="key-hint">F</span>
+                        </div>
+                        <div class="skill-slot locked" id="active-slot-1">
+                            <span class="key-hint">G</span>
+                        </div>
+                        <div class="potion-slot" id="potion-slot">
+                            <span class="potion-icon">🧪</span>
+                            <span class="potion-count">x3</span>
+                            <span class="key-hint">Q</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="hud-right">
-                <div class="stat-display">
-                    <span id="gold-display">💰 0</span>
-                    <span id="room-display">Sala 1/8</span>
+
+                <!-- Right: Items Panel -->
+                <div class="hud-section right-panel">
+                    <div class="items-panel" id="items-panel">
+                        <div class="panel-header">ITEMS</div>
+                        <div class="items-list" id="items-list">
+                            <!-- Items generated by JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -301,17 +395,12 @@
         <!-- Minimap -->
         <div id="minimap">
             <canvas id="minimap-canvas" width="150" height="100"></canvas>
-            <div id="minimap-under" class="minimap-under">
-                <div class="dash-cooldown" id="dash-cooldown">
-                    <div class="cooldown-fill"></div>
-                </div>
-                <div class="potion-slot" id="potion-slot">
-                    <span class="potion-icon">🧪</span>
-                    <span class="potion-count">x3</span>
-                </div>
-                <div class="active-display" id="active-display">
-                    <div class="active-slot empty" data-slot="0">F</div>
-                </div>
+            <div id="minimap-legend" class="minimap-legend">
+                <div class="legend-item"><span class="legend-dot completed"></span>Completadas</div>
+                <div class="legend-item"><span class="legend-dot incomplete"></span>Incompletas</div>
+                <div class="legend-item"><span class="legend-dot shop"></span>Tienda</div>
+                <div class="legend-item"><span class="legend-dot miniboss"></span>MiniBoss</div>
+                <div class="legend-item"><span class="legend-dot boss"></span>Boss</div>
             </div>
         </div>
     </div>
@@ -384,121 +473,122 @@
 
     <!-- Codex (Bestiary + Achievements) -->
     <div id="codex-overlay" class="overlay hidden">
-    <div class="codex-content">
-        <div class="codex-header">
-            <h2>📜 CÓDEX</h2>
-            <button class="codex-close" id="btn-close-codex">✖</button>
-        </div>
-        <div class="codex-tabs">
-            <button class="codex-tab active" data-tab="bestiary">Bestiario</button>
-            <button class="codex-tab" data-tab="achievements">Logros</button>
-            <button class="codex-tab" data-tab="history">Historial</button>
-            <button class="codex-tab" data-tab="sets">Sets</button>
-            <button class="codex-tab" data-tab="book">Libro</button>
-        </div>
-        <div class="codex-body">
-            <div class="codex-panel active" id="codex-panel-bestiary">
-                <div class="codex-split">
-                    <div class="codex-list" id="bestiary-list"></div>
-                    <div class="codex-detail" id="bestiary-detail"></div>
-                </div>
+        <div class="codex-content">
+            <div class="codex-header">
+                <h2>📜 CÓDEX</h2>
+                <button class="codex-close" id="btn-close-codex">✖</button>
             </div>
-            <div class="codex-panel" id="codex-panel-achievements">
-                <div class="achievements-list" id="achievements-list"></div>
+            <div class="codex-tabs">
+                <button class="codex-tab active" data-tab="bestiary">Bestiario</button>
+                <button class="codex-tab" data-tab="achievements">Logros</button>
+                <button class="codex-tab" data-tab="history">Historial</button>
+                <button class="codex-tab" data-tab="sets">Sets</button>
+                <button class="codex-tab" data-tab="book">Libro</button>
             </div>
-            <div class="codex-panel" id="codex-panel-history">
-                <div class="codex-split">
-                    <div class="codex-list">
-                        <div class="history-controls">
-                            <input id="history-filter" type="text" placeholder="Filtrar (bioma, NG+, oro, kills...)" />
-                            <select id="history-sort">
-                                <option value="date_desc">Más reciente</option>
-                                <option value="ng_desc">NG+ más alto</option>
-                                <option value="gold_desc">Más oro</option>
-                                <option value="kills_desc">Más kills</option>
-                                <option value="time_desc">Más tiempo</option>
-                            </select>
-                            <button id="btn-history-clear" class="small-btn danger">Limpiar</button>
-                        </div>
-                        <div class="history-summary" id="history-summary"></div>
-                        <div class="history-list" id="history-list"></div>
+            <div class="codex-body">
+                <div class="codex-panel active" id="codex-panel-bestiary">
+                    <div class="codex-split">
+                        <div class="codex-list" id="bestiary-list"></div>
+                        <div class="codex-detail" id="bestiary-detail"></div>
                     </div>
-                    <div class="codex-detail" id="history-detail"></div>
                 </div>
-            </div>
-            <div class="codex-panel" id="codex-panel-sets">
-                <div class="sets-panel" id="sets-panel"></div>
-            </div>
-            <div class="codex-panel" id="codex-panel-book">
-                <div class="codex-split">
-                    <div class="codex-list" id="book-page-list"></div>
-                    <div class="codex-detail" id="book-page-detail"></div>
+                <div class="codex-panel" id="codex-panel-achievements">
+                    <div class="achievements-list" id="achievements-list"></div>
+                </div>
+                <div class="codex-panel" id="codex-panel-history">
+                    <div class="codex-split">
+                        <div class="codex-list">
+                            <div class="history-controls">
+                                <input id="history-filter" type="text"
+                                    placeholder="Filtrar (bioma, NG+, oro, kills...)" />
+                                <select id="history-sort">
+                                    <option value="date_desc">Más reciente</option>
+                                    <option value="ng_desc">NG+ más alto</option>
+                                    <option value="gold_desc">Más oro</option>
+                                    <option value="kills_desc">Más kills</option>
+                                    <option value="time_desc">Más tiempo</option>
+                                </select>
+                                <button id="btn-history-clear" class="small-btn danger">Limpiar</button>
+                            </div>
+                            <div class="history-summary" id="history-summary"></div>
+                            <div class="history-list" id="history-list"></div>
+                        </div>
+                        <div class="codex-detail" id="history-detail"></div>
+                    </div>
+                </div>
+                <div class="codex-panel" id="codex-panel-sets">
+                    <div class="sets-panel" id="sets-panel"></div>
+                </div>
+                <div class="codex-panel" id="codex-panel-book">
+                    <div class="codex-split">
+                        <div class="codex-list" id="book-page-list"></div>
+                        <div class="codex-detail" id="book-page-detail"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Relic Draft (New NG) -->
-<div id="relic-draft-overlay" class="overlay hidden">
-    <div class="choice-content">
-        <h2>✅ Elegí 1 de 3 Reliquias</h2>
-        <p class="choice-sub">Solo aparece al empezar un nuevo NG.</p>
-        <div id="relic-draft-options" class="choice-options"></div>
-    </div>
-</div>
-
-<!-- Path Choice (Fork) -->
-<div id="path-choice-overlay" class="overlay hidden">
-    <div class="choice-content">
-        <h2>🧭 Elegí el camino</h2>
-        <p class="choice-sub">Podés volver atrás si la sala está limpia.</p>
-        <div id="path-choice-options" class="choice-options"></div>
-        <button id="path-choice-cancel" class="discard-btn">Cancelar</button>
-    </div>
-</div>
-
-
-<!-- Forge Terminal (Demencial) -->
-<div id="forge-overlay" class="overlay hidden">
-    <div class="forge-content">
-        <div class="forge-header">
-            <h2>🛠️ FORJA-TERMINAL</h2>
-            <button id="btn-close-forge" class="codex-close">✖</button>
-        </div>
-        <div id="forge-info" class="forge-info"></div>
-        <div class="forge-split">
-            <div class="forge-left">
-                <h3>Runas Vacías</h3>
-                <div id="forge-rune-list" class="forge-rune-list"></div>
-                <div class="forge-templates">
-                    <label>Plantillas:</label>
-                    <select id="forge-templates">
-                        <option value="">(elegí una)</option>
-                        <option value="double_cast">Doble Disparo</option>
-                        <option value="burn_on_hit">Quemadura OnHit</option>
-                        <option value="rare_explode">Explosión rara</option>
-                        <option value="shield_on_damage">Escudo al recibir daño</option>
-                    </select>
-                </div>
-            </div>
-            <div class="forge-right">
-                <h3>Pseudo-código</h3>
-                <div class="forge-editor-row">
-                    <textarea id="forge-editor" class="forge-editor" spellcheck="false"></textarea>
-                    <div id="forge-docs" class="forge-docs"></div>
-                </div>
-                <div class="forge-actions">
-                    <button id="btn-forge-validate" class="small-btn">Validar</button>
-                    <button id="btn-forge-program" class="small-btn primary">Programar</button>
-                    <div id="forge-validate-output" class="forge-validate-output"></div>
-                    <div id="forge-cost" class="forge-cost"></div>
-                </div>
-                <div class="forge-hint">Límites: 16 líneas • CPU 30 por evento • repeat máx 6 • spawns/s máx 8</div>
-            </div>
+    <!-- Relic Draft (New NG) -->
+    <div id="relic-draft-overlay" class="overlay hidden">
+        <div class="choice-content">
+            <h2>✅ Elegí 1 de 3 Reliquias</h2>
+            <p class="choice-sub">Solo aparece al empezar un nuevo NG.</p>
+            <div id="relic-draft-options" class="choice-options"></div>
         </div>
     </div>
-</div>
+
+    <!-- Path Choice (Fork) -->
+    <div id="path-choice-overlay" class="overlay hidden">
+        <div class="choice-content">
+            <h2>🧭 Elegí el camino</h2>
+            <p class="choice-sub">Podés volver atrás si la sala está limpia.</p>
+            <div id="path-choice-options" class="choice-options"></div>
+            <button id="path-choice-cancel" class="discard-btn">Cancelar</button>
+        </div>
+    </div>
+
+
+    <!-- Forge Terminal (Demencial) -->
+    <div id="forge-overlay" class="overlay hidden">
+        <div class="forge-content">
+            <div class="forge-header">
+                <h2>🛠️ FORJA-TERMINAL</h2>
+                <button id="btn-close-forge" class="codex-close">✖</button>
+            </div>
+            <div id="forge-info" class="forge-info"></div>
+            <div class="forge-split">
+                <div class="forge-left">
+                    <h3>Runas Vacías</h3>
+                    <div id="forge-rune-list" class="forge-rune-list"></div>
+                    <div class="forge-templates">
+                        <label>Plantillas:</label>
+                        <select id="forge-templates">
+                            <option value="">(elegí una)</option>
+                            <option value="double_cast">Doble Disparo</option>
+                            <option value="burn_on_hit">Quemadura OnHit</option>
+                            <option value="rare_explode">Explosión rara</option>
+                            <option value="shield_on_damage">Escudo al recibir daño</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="forge-right">
+                    <h3>Pseudo-código</h3>
+                    <div class="forge-editor-row">
+                        <textarea id="forge-editor" class="forge-editor" spellcheck="false"></textarea>
+                        <div id="forge-docs" class="forge-docs"></div>
+                    </div>
+                    <div class="forge-actions">
+                        <button id="btn-forge-validate" class="small-btn">Validar</button>
+                        <button id="btn-forge-program" class="small-btn primary">Programar</button>
+                        <div id="forge-validate-output" class="forge-validate-output"></div>
+                        <div id="forge-cost" class="forge-cost"></div>
+                    </div>
+                    <div class="forge-hint">Límites: 16 líneas • CPU 30 por evento • repeat máx 6 • spawns/s máx 8</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Loading Screen -->
     <div id="loading-screen" class="overlay">

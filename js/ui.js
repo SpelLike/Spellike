@@ -24,6 +24,7 @@ const UI = {
             'difficulty-select': document.getElementById('difficulty-select'),
             'settings-screen': document.getElementById('settings-screen'),
             'game-screen': document.getElementById('game-screen'),
+            'updates-screen': document.getElementById('updates-screen'), // New screen
         };
 
         this.setupMenuEvents();
@@ -34,6 +35,7 @@ const UI = {
         this.setupGameUIEvents();
         this.setupCodexEvents();
         this.setupRuneTooltips();
+        this.setupUpdatesEvents(); // New events
 
         // Global escape to close blocking modals (prevents "stuck" shop on small screens)
         document.addEventListener('keydown', (e) => {
@@ -170,7 +172,7 @@ const UI = {
                         const bossAlive = !!(room && room.enemies && room.enemies.some(e => e && e.active && e.isBoss && (e.hp === undefined || e.hp > 0)));
                         const inBossContext = !!(room && room.type === 'boss' && (room._inBossFight || bossAlive));
                         if (inBossContext) state = 'boss';
-                    } catch (e) {}
+                    } catch (e) { }
 
                     AudioManager.setMusicState(state);
                 } else if (!inRun) {
@@ -178,7 +180,7 @@ const UI = {
                 }
                 // else: keep current track (party/boss) while paused/in settings
             }
-        } catch (e) {}
+        } catch (e) { }
 
         if (screenId === 'difficulty-select') {
             // Ensure difficulty cards reflect unlocks (e.g., Demencial unlock after first boss)
@@ -206,7 +208,7 @@ const UI = {
             const m = (window.Meta && Meta.data) ? Meta.data : null;
             bossNormal = (m && m.stats && (m.stats.bossKillsNormal || 0)) || 0;
             bossHard = (m && m.stats && (m.stats.bossKillsHard || 0)) || 0;
-        } catch (e) {}
+        } catch (e) { }
 
         const unlockedHard = bossNormal >= 1;
         const unlockedDemonic = bossHard >= 1;
@@ -270,6 +272,15 @@ const UI = {
             fbBtn.onclick = () => {
                 AudioManager.play('menuClick');
                 this.showScreen('feedback-screen');
+            };
+        }
+
+        // Updates / Novedades button
+        const updatesBtn = document.getElementById('btn-updates');
+        if (updatesBtn) {
+            updatesBtn.onclick = () => {
+                AudioManager.play('menuClick');
+                this.showScreen('updates-screen');
             };
         }
 
@@ -339,7 +350,7 @@ const UI = {
 
             // Friendly template. Keep it clean and readable (no literal "\\n" sequences).
             const template = body.length ? body : (
-`Describe el problema/recomendación:
+                `Describe el problema/recomendación:
 ...
 
 Pasos para reproducir:
@@ -766,7 +777,7 @@ ${template}
         this.codexReturn = returnTo;
 
         // Pause game while codex is open
-        try { Game.paused = true; } catch (e) {}
+        try { Game.paused = true; } catch (e) { }
 
         // Hide pause menu if it was open
         const pauseMenu = document.getElementById('pause-menu');
@@ -799,9 +810,9 @@ ${template}
         if (this.codexReturn === 'pause') {
             const pauseMenu = document.getElementById('pause-menu');
             if (pauseMenu) pauseMenu.classList.remove('hidden');
-            try { Game.paused = true; } catch (e) {}
+            try { Game.paused = true; } catch (e) { }
         } else {
-            try { Game.paused = false; } catch (e) {}
+            try { Game.paused = false; } catch (e) { }
         }
     },
 
@@ -980,7 +991,7 @@ ${template}
         try {
             const key = 'arcane_depths_run_history';
             localStorage.setItem(key, JSON.stringify(Array.isArray(arr) ? arr : []));
-        } catch (e) {}
+        } catch (e) { }
     },
 
     _formatTime(seconds) {
@@ -1177,7 +1188,7 @@ ${template}
         `;
         document.body.appendChild(t);
         setTimeout(() => {
-            try { t.remove(); } catch (e) {}
+            try { t.remove(); } catch (e) { }
         }, 3600);
     },
 
@@ -1702,7 +1713,7 @@ ${template}
                             const id = entry.kind === 'item' ? entry.item?.id : null;
                             if (id) Meta.recordPurchase(id);
                         }
-                    } catch (e) {}
+                    } catch (e) { }
 
                     // Optional downside
                     if (typeof entry.onBuy === 'function') {
@@ -1723,156 +1734,156 @@ ${template}
         render();
     },
 
-// =========================
-// FORGE TERMINAL (Demencial)
-// =========================
-showForgeTerminal(forgeData) {
-    // forgeData: { cost, biomeId }
-    if (this.forgeModal) return;
-    const overlay = document.getElementById('forge-overlay');
-    if (!overlay) return;
+    // =========================
+    // FORGE TERMINAL (Demencial)
+    // =========================
+    showForgeTerminal(forgeData) {
+        // forgeData: { cost, biomeId }
+        if (this.forgeModal) return;
+        const overlay = document.getElementById('forge-overlay');
+        if (!overlay) return;
 
-    // Pause game while open
-    try { Game.paused = true; } catch (e) {}
+        // Pause game while open
+        try { Game.paused = true; } catch (e) { }
 
-    this.forgeModal = true;
-    overlay.classList.remove('hidden');
+        this.forgeModal = true;
+        overlay.classList.remove('hidden');
 
-    // Populate rune list
-    const list = document.getElementById('forge-rune-list');
-    const editor = document.getElementById('forge-editor');
-    const info = document.getElementById('forge-info');
-    const docs = document.getElementById('forge-docs');
-    const costEl = document.getElementById('forge-cost');
-    const btnProgram = document.getElementById('btn-forge-program');
-    const btnClose = document.getElementById('btn-close-forge');
-    const btnValidate = document.getElementById('btn-forge-validate');
-    const templates = document.getElementById('forge-templates');
+        // Populate rune list
+        const list = document.getElementById('forge-rune-list');
+        const editor = document.getElementById('forge-editor');
+        const info = document.getElementById('forge-info');
+        const docs = document.getElementById('forge-docs');
+        const costEl = document.getElementById('forge-cost');
+        const btnProgram = document.getElementById('btn-forge-program');
+        const btnClose = document.getElementById('btn-close-forge');
+        const btnValidate = document.getElementById('btn-forge-validate');
+        const templates = document.getElementById('forge-templates');
 
-    const emptyRunes = (Game.player && Game.player.runes) ? Game.player.runes
-        .map((r, idx) => ({ r, idx }))
-        .filter(x => x.r && x.r.id === 'empty_rune' && !x.r.programmed) : [];
+        const emptyRunes = (Game.player && Game.player.runes) ? Game.player.runes
+            .map((r, idx) => ({ r, idx }))
+            .filter(x => x.r && x.r.id === 'empty_rune' && !x.r.programmed) : [];
 
-    list.innerHTML = '';
-    let selectedIdx = emptyRunes.length ? emptyRunes[0].idx : -1;
-
-    function renderList() {
         list.innerHTML = '';
-        for (const it of emptyRunes) {
-            const btn = document.createElement('button');
-            btn.className = 'forge-rune-btn' + (it.idx === selectedIdx ? ' active' : '');
-            btn.textContent = `⬜ Runa Vacía (slot ${it.idx + 1})`;
-            btn.onclick = () => { selectedIdx = it.idx; renderList(); };
-            list.appendChild(btn);
-        }
-        if (emptyRunes.length === 0) {
-            const p = document.createElement('div');
-            p.className = 'forge-empty';
-            p.textContent = 'No tenés Runas Vacías.';
-            list.appendChild(p);
-        }
-    }
-    renderList();
+        let selectedIdx = emptyRunes.length ? emptyRunes[0].idx : -1;
 
-    if (templates) {
-        templates.onchange = () => {
-            const v = templates.value;
-            if (v && window.RuneScript && RuneScript.templates[v]) {
-                editor.value = RuneScript.templates[v];
-                try { updateCost(); } catch (e) {}
+        function renderList() {
+            list.innerHTML = '';
+            for (const it of emptyRunes) {
+                const btn = document.createElement('button');
+                btn.className = 'forge-rune-btn' + (it.idx === selectedIdx ? ' active' : '');
+                btn.textContent = `⬜ Runa Vacía (slot ${it.idx + 1})`;
+                btn.onclick = () => { selectedIdx = it.idx; renderList(); };
+                list.appendChild(btn);
             }
-        };
-    }
-
-    if (info) info.textContent = `Costo base: ${forgeData.cost} oro • Bioma: ${forgeData.biomeId}`;
-
-    // Docs panel
-    if (docs && window.RuneScript && typeof RuneScript.getDocsHTML === 'function') {
-        docs.innerHTML = RuneScript.getDocsHTML();
-    } else if (docs) {
-        docs.innerHTML = '<div class="doc-section"><h4>Comandos</h4><div class="doc-kv">Cargando…</div></div>';
-    }
-
-    // Init docs tabs/pages
-    if (docs) this.initForgeDocs(docs);
-
-    let lastValidation = null;
-
-    function updateCost() {
-        if (!costEl || !window.RuneScript || typeof RuneScript.analyze !== 'function') return;
-        const a = RuneScript.analyze(editor.value || '');
-        if (!a.ok) {
-            costEl.textContent = '';
-            return;
+            if (emptyRunes.length === 0) {
+                const p = document.createElement('div');
+                p.className = 'forge-empty';
+                p.textContent = 'No tenés Runas Vacías.';
+                list.appendChild(p);
+            }
         }
-        const total = forgeData.cost + a.extraCost;
-        costEl.textContent = `Total: ${total} (base ${forgeData.cost} + script ${a.extraCost})`;
-    }
+        renderList();
 
-    function validate() {
-        if (!window.RuneScript) return { ok: false, error: 'Motor de runas no cargado.' };
-        const res = RuneScript.compile(editor.value || '');
-        lastValidation = res;
-        const out = document.getElementById('forge-validate-output');
-        if (out) {
-            out.textContent = res.ok ? '✅ OK' : ('❌ ' + res.error);
-            out.className = res.ok ? 'forge-ok' : 'forge-bad';
+        if (templates) {
+            templates.onchange = () => {
+                const v = templates.value;
+                if (v && window.RuneScript && RuneScript.templates[v]) {
+                    editor.value = RuneScript.templates[v];
+                    try { updateCost(); } catch (e) { }
+                }
+            };
         }
-        return res;
-    }
 
-    // Recalculate dynamic cost live
-    if (editor) {
-        editor.oninput = () => { updateCost(); };
-        updateCost();
-    }
+        if (info) info.textContent = `Costo base: ${forgeData.cost} oro • Bioma: ${forgeData.biomeId}`;
 
-    if (btnValidate) btnValidate.onclick = () => { AudioManager.play('menuClick'); validate(); };
+        // Docs panel
+        if (docs && window.RuneScript && typeof RuneScript.getDocsHTML === 'function') {
+            docs.innerHTML = RuneScript.getDocsHTML();
+        } else if (docs) {
+            docs.innerHTML = '<div class="doc-section"><h4>Comandos</h4><div class="doc-kv">Cargando…</div></div>';
+        }
 
-    if (btnProgram) btnProgram.onclick = () => {
-        AudioManager.play('menuClick');
-        if (selectedIdx < 0) return;
-        const res = validate();
-        if (!res.ok) return;
+        // Init docs tabs/pages
+        if (docs) this.initForgeDocs(docs);
 
-        const a = (window.RuneScript && typeof RuneScript.analyze === 'function')
-            ? RuneScript.analyze(editor.value || '')
-            : { ok: true, extraCost: 0 };
-        if (!a.ok) return;
+        let lastValidation = null;
 
-        const totalCost = forgeData.cost + (a.extraCost || 0);
+        function updateCost() {
+            if (!costEl || !window.RuneScript || typeof RuneScript.analyze !== 'function') return;
+            const a = RuneScript.analyze(editor.value || '');
+            if (!a.ok) {
+                costEl.textContent = '';
+                return;
+            }
+            const total = forgeData.cost + a.extraCost;
+            costEl.textContent = `Total: ${total} (base ${forgeData.cost} + script ${a.extraCost})`;
+        }
 
-        if (!Game.player || Game.player.gold < totalCost) {
+        function validate() {
+            if (!window.RuneScript) return { ok: false, error: 'Motor de runas no cargado.' };
+            const res = RuneScript.compile(editor.value || '');
+            lastValidation = res;
             const out = document.getElementById('forge-validate-output');
-            if (out) { out.textContent = `❌ Oro insuficiente (necesitás ${totalCost})`; out.className = 'forge-bad'; }
-            return;
+            if (out) {
+                out.textContent = res.ok ? '✅ OK' : ('❌ ' + res.error);
+                out.className = res.ok ? 'forge-ok' : 'forge-bad';
+            }
+            return res;
         }
 
-        // Apply programming
-        Game.player.gold -= totalCost;
-        const rune = Game.player.runes[selectedIdx];
-        rune.programmed = true;
-        rune.scriptText = editor.value || '';
-        rune.script = res.program;
-        rune.name = 'Runa Programada';
-        rune.icon = '🧩';
-        rune.desc = 'Ejecuta tu pseudo-código.';
+        // Recalculate dynamic cost live
+        if (editor) {
+            editor.oninput = () => { updateCost(); };
+            updateCost();
+        }
 
-        // Risk: small chance of ambush
-        try { Game.onForgeUsed && Game.onForgeUsed(); } catch (e) {}
+        if (btnValidate) btnValidate.onclick = () => { AudioManager.play('menuClick'); validate(); };
 
-        this.hideForgeTerminal();
-    };
+        if (btnProgram) btnProgram.onclick = () => {
+            AudioManager.play('menuClick');
+            if (selectedIdx < 0) return;
+            const res = validate();
+            if (!res.ok) return;
 
-    if (btnClose) btnClose.onclick = () => { AudioManager.play('menuClick'); this.hideForgeTerminal(); };
-},
+            const a = (window.RuneScript && typeof RuneScript.analyze === 'function')
+                ? RuneScript.analyze(editor.value || '')
+                : { ok: true, extraCost: 0 };
+            if (!a.ok) return;
 
-hideForgeTerminal() {
-    const overlay = document.getElementById('forge-overlay');
-    if (overlay) overlay.classList.add('hidden');
-    this.forgeModal = false;
-    try { Game.paused = false; } catch (e) {}
-},
+            const totalCost = forgeData.cost + (a.extraCost || 0);
+
+            if (!Game.player || Game.player.gold < totalCost) {
+                const out = document.getElementById('forge-validate-output');
+                if (out) { out.textContent = `❌ Oro insuficiente (necesitás ${totalCost})`; out.className = 'forge-bad'; }
+                return;
+            }
+
+            // Apply programming
+            Game.player.gold -= totalCost;
+            const rune = Game.player.runes[selectedIdx];
+            rune.programmed = true;
+            rune.scriptText = editor.value || '';
+            rune.script = res.program;
+            rune.name = 'Runa Programada';
+            rune.icon = '🧩';
+            rune.desc = 'Ejecuta tu pseudo-código.';
+
+            // Risk: small chance of ambush
+            try { Game.onForgeUsed && Game.onForgeUsed(); } catch (e) { }
+
+            this.hideForgeTerminal();
+        };
+
+        if (btnClose) btnClose.onclick = () => { AudioManager.play('menuClick'); this.hideForgeTerminal(); };
+    },
+
+    hideForgeTerminal() {
+        const overlay = document.getElementById('forge-overlay');
+        if (overlay) overlay.classList.add('hidden');
+        this.forgeModal = false;
+        try { Game.paused = false; } catch (e) { }
+    },
 
 
     closeShop() {
@@ -1929,127 +1940,212 @@ hideForgeTerminal() {
     // HUD UPDATE
     // ===========================
 
+    setupUpdatesEvents() {
+        const backBtn = document.getElementById('btn-back-updates');
+        if (backBtn) {
+            backBtn.onclick = () => {
+                AudioManager.play('menuClick');
+                this.showScreen('main-menu');
+            };
+        }
+    },
+
+
+
+    // New helper to check if mouse is over UI (to prevent shooting)
+    shouldPreventShooting() {
+        // If any overlay is active (pause, shop, etc)
+        if (this.currentScreen !== 'game-screen') return true;
+        if (this.isBlockingOverlayOpen()) return true;
+
+        // Check exact hover on interactive elements
+        // We use :hover pseudo-class check safely
+        const hovered = document.querySelector('.rune-slot:hover, .skill-slot:hover, .menu-btn:hover, .codex-tab:hover, .set-icon:hover, .passive-icon:hover');
+        return !!hovered;
+    },
+
     updateHUD(player, room, dungeon) {
-        // Health
-        const hpPercent = (player.hp / player.maxHp) * 100;
-        document.getElementById('health-fill').style.width = hpPercent + '%';
-        document.getElementById('health-text').textContent = `${Math.floor(player.hp)}/${player.maxHp}`;
+        if (!player) return;
 
-        // Mana
-        const manaPercent = (player.mana / player.maxMana) * 100;
-        document.getElementById('mana-fill').style.width = manaPercent + '%';
-        document.getElementById('mana-text').textContent = `${Math.floor(player.mana)}/${player.maxMana}`;
+        // Vitals
+        const hpPct = (player.hp / player.maxHp) * 100;
+        const manaPct = (player.mana / player.maxMana) * 100;
 
-        // Gold and room
-        document.getElementById('gold-display').textContent = `💰 ${player.gold}`;
-        document.getElementById('room-display').textContent = `Sala ${dungeon.currentRoomIndex + 1}/${dungeon.roomsPerBiome}`;
+        const hpFill = document.getElementById('health-fill');
+        const manaFill = document.getElementById('mana-fill');
+        const hpText = document.getElementById('health-text');
+        const manaText = document.getElementById('mana-text');
 
-        // Bottom-left mini info: biome/room + current negative events
-        const mini = document.getElementById('room-mini');
-        if (mini && room) {
-            const biomeId = (window.Game && Game.currentBiome) ? Game.currentBiome : (room.biome || 'forest');
-            const biomeNum = (window.BiomeOrder && Array.isArray(BiomeOrder)) ? (BiomeOrder.indexOf(biomeId) + 1) : 1;
-            const biomeTotal = (window.BiomeOrder && Array.isArray(BiomeOrder)) ? BiomeOrder.length : 12;
-            const rIdx = dungeon.currentRoomIndex + 1;
-            const rTot = dungeon.roomsPerBiome;
+        if (hpFill) hpFill.style.width = `${Math.max(0, hpPct)}%`;
+        if (manaFill) manaFill.style.width = `${Math.max(0, manaPct)}%`;
+        if (hpText) hpText.textContent = `${Math.ceil(player.hp)}/${player.maxHp}`;
+        if (manaText) manaText.textContent = `${Math.floor(player.mana)}/${player.maxMana}`;
 
-            let eventsText = 'OFF';
-            if (window.Game && Game.eventsEnabled !== false) {
-                const map = {
-                    mud: 'Lodo',
-                    meteors: 'Meteoritos',
-                    toxic_fog: 'Niebla',
-                    darkness: 'Oscuridad',
-                    lightning: 'Rayos',
-                    ice: 'Hielo',
-                    gravity_wells: 'Gravedad',
-                    spikes: 'Pinchos',
-                    mana_drain: 'Drenaje Maná',
-                    anti_magic: 'Anti-Magia',
-                    enrage: 'Enrage',
-                    barrels: 'Barriles'
-                };
-                const ids = (room.roomModifiers || []).map(m => m.id);
-                const names = ids.map(id => map[id] || id).filter(Boolean);
-                eventsText = names.length ? names.join(', ') : '—';
+        // Top Right Stats
+        const goldEl = document.getElementById('gold-display');
+        if (goldEl) goldEl.textContent = `💰 ${player.gold}`;
+
+        // Biome / Sala / Event Info (Top Left)
+        const biomeEl = document.getElementById('biome-display');
+        const roomNumEl = document.getElementById('room-num-display');
+        const eventRow = document.getElementById('event-row');
+        const eventNameEl = document.getElementById('event-name');
+
+        if (biomeEl && window.Game && window.BiomeOrder) {
+            const idx = BiomeOrder.indexOf(Game.currentBiome);
+            const biomeNum = (idx >= 0 ? idx : 0) + 1;
+            biomeEl.textContent = `${biomeNum}/12`;
+        }
+        if (roomNumEl && dungeon) {
+            roomNumEl.textContent = `${dungeon.currentRoomIndex + 1}/${dungeon.roomsPerBiome}`;
+        }
+        // Event display
+        if (eventRow && eventNameEl && room) {
+            // Event display lookup
+            const eventNames = {
+                'mud': 'Barro', 'meteors': 'Meteoritos', 'toxic_fog': 'Niebla Tóxica',
+                'darkness': 'Oscuridad', 'lightning': 'Rayos', 'ice': 'Hielo',
+                'gravity_wells': 'Pozos de Gravedad', 'spikes': 'Pinchos',
+                'mana_drain': 'Drenaje Maná', 'anti_magic': 'Anti-Magia',
+                'enrage': 'Furia', 'barrels': 'Barriles'
+            };
+
+            const mods = room.roomModifiers || [];
+            if (mods.length > 0) {
+                eventRow.style.display = 'flex';
+                // Map ID to name, fallback to ID if missing
+                eventNameEl.textContent = mods.map(m => eventNames[m.id] || m.id).join(', ');
+            } else {
+                eventRow.style.display = 'flex';
+                eventNameEl.textContent = '---';
             }
-
-            mini.innerHTML = `<div class="mini-title">Bioma ${biomeNum}/${biomeTotal} • Sala ${rIdx}/${rTot}</div><div class="mini-events">Eventos: ${eventsText}</div>`;
         }
 
-        // Dash cooldown
-        const dashPercent = Math.max(0, 1 - player.dashCooldownTimer / player.dashCooldown) * 100;
-        document.querySelector('.cooldown-fill').style.width = dashPercent + '%';
-
-        // Potions
-        document.querySelector('.potion-count').textContent = `x${player.potions}`;
-
-        // Runes (dynamic)
+        // Bottom Center: Runs
         this.ensureRuneSlotElements(player.runes.length);
         const runeSlots = document.querySelectorAll('.rune-slot');
         player.runes.forEach((rune, i) => {
             const el = runeSlots[i];
             if (!el) return;
+            // Clear content first
+            el.innerHTML = '';
+            el.className = 'rune-slot ' + (rune ? 'filled' : 'empty');
+
             if (rune) {
                 el.textContent = rune.icon;
-                el.classList.remove('empty');
-                el.classList.add('filled');
-                el.title = `${rune.name}: ${rune.desc || ''}`;
+                el.title = `${rune.name}\n${rune.desc || ''}`;
             } else {
-                el.textContent = '';
-                el.classList.add('empty');
-                el.classList.remove('filled');
-                el.title = 'Slot vacío';
+                el.title = 'Runa Vacía';
             }
         });
 
-        // Active items HUD
-        const activeCount = (player.activeItems && player.activeItems.length) ? player.activeItems.length : 1;
-        this.ensureActiveSlotElements(activeCount);
-        const activeSlots = document.querySelectorAll('.active-slot');
-        for (let i = 0; i < activeCount; i++) {
-            const el = activeSlots[i];
-            if (!el) continue;
-            const it = (player.activeItems || [])[i] || null;
-            const cd = player.activeCooldowns ? player.activeCooldowns[i] : 0;
-
-            const key = i === 0 ? 'F' : 'G';
-            const iconEl = el.querySelector('.slot-icon');
-            const clockEl = el.querySelector('.cd-clock');
-            const cdTextEl = el.querySelector('.cd-text');
-
-            if (it) {
-                if (iconEl) iconEl.textContent = it.icon;
-                el.classList.remove('empty');
-                el.classList.add('filled');
-                el.title = `${key}: ${it.name} — ${it.desc || ''} (CD ${it.cooldown || 0}s)`;
+        // Bottom Center: Skills
+        // Dash
+        const dashFill = document.getElementById('dash-cooldown-fill');
+        if (dashFill) {
+            // Inverted logic: fill means "on cooldown" usually, or "ready"?
+            // Let's make it an overlay that shrinks as CD recovers (height 100% -> 0%)
+            // player.dashCooldownTimer counts DOWN from max.
+            if (player.dashCooldown > 0) {
+                const ratio = player.dashCooldownTimer / player.dashCooldown; // 1.0 -> 0.0
+                dashFill.style.height = `${ratio * 100}%`;
             } else {
-                if (iconEl) iconEl.textContent = key;
-                el.classList.add('empty');
-                el.classList.remove('filled');
-                el.title = `${key}: slot vacío`;
+                dashFill.style.height = '0%';
             }
+        }
 
-            // Cooldown clock overlay (fills like a clock/pie)
-            let remaining = 0;
-            let maxCd = 0;
-            if (it && cd > 0) {
-                remaining = cd;
-                maxCd = Math.max(0.001, (it.cooldown || 0), cd);
+        // Active Slots
+        // Slot 0 (F)
+        const active0 = document.getElementById('active-slot-0');
+        if (active0) {
+            const item = (player.activeItems && player.activeItems[0]);
+            const icon = active0.querySelector('.skill-icon');
+            const cdOverlay = active0.querySelector('.cooldown-overlay');
+
+            if (item) {
+                active0.classList.remove('empty');
+                if (icon) { icon.textContent = item.icon; icon.classList.remove('empty'); }
+                active0.title = `${item.name} [F]\n${item.desc}`;
+
+                // CD
+                const current = (player.activeCooldowns && player.activeCooldowns[0]) || 0;
+                const max = item.cooldown || 1;
+                const ratio = Math.max(0, Math.min(1, current / max));
+                if (cdOverlay) cdOverlay.style.height = `${ratio * 100}%`;
+            } else {
+                active0.classList.add('empty');
+                if (icon) { icon.textContent = ''; icon.classList.add('empty'); }
+                active0.title = 'Slot Vacío [F]';
+                if (cdOverlay) cdOverlay.style.height = '0%';
             }
-            const ratio = (maxCd > 0) ? Math.max(0, Math.min(1, remaining / maxCd)) : 0;
-            if (clockEl) {
-                clockEl.style.setProperty('--a', (ratio * 360).toFixed(2) + 'deg');
-                clockEl.style.opacity = remaining > 0 ? '1' : '0';
+        }
+
+        // Slot 1 (G)
+        const active1 = document.getElementById('active-slot-1');
+        if (active1) {
+            // Check if unlocked? 
+            // In game.js, adding slots is supported. We assume if player.activeItems.length > 1, it's unlocked.
+            const unlocked = (player.activeItems && player.activeItems.length > 1);
+            if (unlocked) {
+                active1.classList.remove('locked');
+                const item = player.activeItems[1];
+                // Need to create structure similarly if not exists? 
+                // HTML has simple structure. Let's just update if unlocked.
+                if (!active1.querySelector('.skill-icon')) {
+                    // Lazy init structure if needed, or assume HTML is static for now.
+                    // The HTML was: <div class="skill-slot locked" id="active-slot-1"><span class="key-hint">G</span></div>
+                    // We need to add icon/overlay if unlocked
+                    active1.innerHTML = `<div class="skill-icon empty"></div><div class="cooldown-overlay"></div><span class="key-hint">G</span>`;
+                }
+
+                const icon = active1.querySelector('.skill-icon');
+                const cdOverlay = active1.querySelector('.cooldown-overlay');
+
+                if (item) {
+                    active1.classList.remove('empty');
+                    if (icon) { icon.textContent = item.icon; icon.classList.remove('empty'); }
+                    active1.title = `${item.name} [G]\n${item.desc}`;
+
+                    const current = (player.activeCooldowns && player.activeCooldowns[1]) || 0;
+                    const max = item.cooldown || 1;
+                    const ratio = Math.max(0, Math.min(1, current / max));
+                    if (cdOverlay) cdOverlay.style.height = `${ratio * 100}%`;
+                } else {
+                    active1.classList.add('empty');
+                    if (icon) { icon.textContent = ''; icon.classList.add('empty'); }
+                    active1.title = 'Slot Vacío [G]';
+                    if (cdOverlay) cdOverlay.style.height = '0%';
+                }
+            } else {
+                active1.classList.add('locked');
+                active1.innerHTML = `<span class="key-hint">G</span>`;
+                active1.title = 'Bloqueado (Mejorar en tienda)';
             }
-            if (cdTextEl) {
-                // Hide numbers by default (we only show the filling clock)
-                cdTextEl.textContent = '';
-                cdTextEl.style.display = 'none';
+        }
+
+        // Potion
+        const potionSlot = document.getElementById('potion-slot');
+        if (potionSlot) {
+            const count = potionSlot.querySelector('.potion-count');
+            if (count) count.textContent = `x${player.potions}`;
+        }
+
+        // Items Panel (Right Side) - Only items, NOT runes
+        const itemsList = document.getElementById('items-list');
+        if (itemsList) {
+            itemsList.innerHTML = '';
+            if (player.passiveItems && player.passiveItems.length > 0) {
+                player.passiveItems.forEach(it => {
+                    const entry = document.createElement('div');
+                    entry.className = 'item-entry rarity-' + (it.rarity || 'common');
+                    entry.innerHTML = `<span class="item-icon">${it.icon || '📦'}</span><span>${it.name}</span>`;
+                    entry.title = it.desc || '';
+                    itemsList.appendChild(entry);
+                });
             }
         }
         // Minimap
-        try { this.updateMinimap(dungeon); } catch (e) {}
+        try { this.updateMinimap(dungeon); } catch (e) { }
     },
 
     // ===========================
@@ -2078,7 +2174,7 @@ hideForgeTerminal() {
 
             const elGold = document.getElementById('pause-gold');
             if (elGold && p) elGold.textContent = `💰 ${p.gold}`;
-        } catch (e) {}
+        } catch (e) { }
     },
 
     hidePauseMenu() {
@@ -2185,9 +2281,9 @@ hideForgeTerminal() {
                     if (window.Game && Game.player) {
                         Game.player.iFrameTimer = Math.max(Game.player.iFrameTimer || 0, 0.75);
                     }
-                } catch (e) {}
+                } catch (e) { }
 
-                try { onPick && onPick(rel); } catch (e) {}
+                try { onPick && onPick(rel); } catch (e) { }
             };
             container.appendChild(card);
         });
@@ -2244,9 +2340,9 @@ hideForgeTerminal() {
                     if (window.Game && Game.player) {
                         Game.player.iFrameTimer = Math.max(Game.player.iFrameTimer || 0, 0.75);
                     }
-                } catch (e) {}
+                } catch (e) { }
 
-                try { onPick && onPick(id); } catch (e) {}
+                try { onPick && onPick(id); } catch (e) { }
             };
             container.appendChild(card);
         });
@@ -2262,7 +2358,7 @@ hideForgeTerminal() {
                     if (window.Game && Game.player) {
                         Game.player.iFrameTimer = Math.max(Game.player.iFrameTimer || 0, 0.75);
                     }
-                } catch (e) {}
+                } catch (e) { }
 
                 const pick = (nodeIds && nodeIds.length) ? nodeIds[0] : null;
                 onPick && onPick(pick);

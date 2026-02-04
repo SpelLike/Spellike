@@ -653,6 +653,13 @@
     padding-right: 6px;
 }
 
+/* History panel: avoid double scrollbars (outer list + inner list)
+   The left column uses .history-list as the only scroll container. */
+#codex-panel-history .codex-list {
+    overflow: hidden;
+}
+
+
 .history-entry {
     border: 1px solid rgba(123, 77, 255, 0.25);
     border-radius: 8px;

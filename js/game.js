@@ -238,49 +238,79 @@ const Game = {
     },
 
 
-// =========================
-// RUN PROGRESSION SCALING (per boss kill, across all modes)
-// =========================
-getProgressionParams() {
-    const diff = this.difficulty || 'normal';
-    if (diff === 'demonic') return { hpStep: 0.28, dmgStep: 0.18, eliteStep: 0.22, eliteBase: 0.12 };
-    if (diff === 'hard') return { hpStep: 0.18, dmgStep: 0.12, eliteStep: 0.16, eliteBase: 0.12 };
-    return { hpStep: 0.10, dmgStep: 0.07, eliteStep: 0.10, eliteBase: 0.12 };
-},
-getEnemyProgressMult() {
-    const p = this.getProgressionParams();
-    const k = Math.max(0, this.bossKillsThisRun || 0);
-    return { hp: (1 + p.hpStep * k), dmg: (1 + p.dmgStep * k) };
-},
-getEliteChance() {
-    const p = this.getProgressionParams();
-    const k = Math.max(0, this.bossKillsThisRun || 0);
-    let c = Math.min(1, Math.max(0, p.eliteBase + p.eliteStep * k));
-    try { if (this.player && this.player.eliteCrown) c = Math.min(1, c + 0.15); } catch (e) {}
-    return c;
-},
-onEnterRoom(room) {
-    if (!room) return;
-    // Navigation flags (backtracking/minimap)
-    try {
-        if (this.dungeon && typeof this.dungeon.canGoBack === 'function') {
-            room.allowBack = !!this.dungeon.canGoBack();
-        }
-        if (this.dungeon && typeof this.dungeon.getNextOptions === 'function') {
-            room._nextOptionsCount = (this.dungeon.getNextOptions() || []).length;
-        }
-        room._inBossFight = !!(room.type === 'boss' && room.enemies && room.enemies.some(e => e && e.active && e.isBoss));
-    } catch (e) {}
+    // =========================
+    // RUN PROGRESSION SCALING (per boss kill, across all modes)
+    // =========================
+    getProgressionParams() {
+        const diff = this.difficulty || 'normal';
+        const k = Math.max(0, this.bossKillsThisRun || 0);
+        const lateGameBonus = k >= 3 ? 0.15 : 0; // Extra scaling after 3 bosses
 
-    // Music state: boss vs normal gameplay
-    try {
-        if (window.AudioManager && typeof AudioManager.setMusicState === 'function') {
-            AudioManager.setMusicState(room.type === 'boss' ? 'boss' : 'party');
-        }
-    } catch (e) {}
+        if (diff === 'demonic') return {
+            hpStep: 0.28 + lateGameBonus, dmgStep: 0.18 + lateGameBonus * 0.6, eliteStep: 0.22 + lateGameBonus, eliteBase: 0.12
+        };
+        if (diff === 'hard') return {
+            hpStep: 0.18 + lateGameBonus, dmgStep: 0.12 + lateGameBonus * 0.5, eliteStep: 0.16 + lateGameBonus, eliteBase: 0.12
+        };
+        return { hpStep: 0.10 + lateGameBonus, dmgStep: 0.07 + lateGameBonus * 0.4, eliteStep: 0.10 + lateGameBonus, eliteBase: 0.12 };
+    },
+    getEnemyProgressMult() {
+        const p = this.getProgressionParams();
+        const k = Math.max(0, this.bossKillsThisRun || 0);
 
-    try { if (typeof room.applyEntryModifiers === 'function') room.applyEntryModifiers(this); } catch (e) {}
-},
+        // Exponential scaling after 3 bosses as requested
+        if (k >= 3) {
+            // Calculate base at k=3
+            const baseHp = (1 + p.hpStep * 3);
+            const baseDmg = (1 + p.dmgStep * 3);
+
+            // Apply exponential growth for kills beyond 3
+            const extraKills = k - 3;
+            // HP x2 per boss
+            const hpMult = baseHp * Math.pow(2, extraKills);
+            // Dmg x1.2 per boss
+            const dmgMult = baseDmg * Math.pow(1.2, extraKills);
+
+            return { hp: hpMult, dmg: dmgMult };
+        }
+
+        return { hp: (1 + p.hpStep * k), dmg: (1 + p.dmgStep * k) };
+    },
+    getEliteChance() {
+        const p = this.getProgressionParams();
+        const k = Math.max(0, this.bossKillsThisRun || 0);
+        let c = Math.min(1, Math.max(0, p.eliteBase + p.eliteStep * k));
+        try { if (this.player && this.player.eliteCrown) c = Math.min(1, c + 0.15); } catch (e) { }
+        return c;
+    },
+    onEnterRoom(room) {
+        if (!room) return;
+
+        // Safety: Invincibility on room entry to prevent unfair hits
+        if (this.player) {
+            this.player.iFrameTimer = 1.5;
+        }
+
+        // Navigation flags (backtracking/minimap)
+        try {
+            if (this.dungeon && typeof this.dungeon.canGoBack === 'function') {
+                room.allowBack = !!this.dungeon.canGoBack();
+            }
+            if (this.dungeon && typeof this.dungeon.getNextOptions === 'function') {
+                room._nextOptionsCount = (this.dungeon.getNextOptions() || []).length;
+            }
+            room._inBossFight = !!(room.type === 'boss' && room.enemies && room.enemies.some(e => e && e.active && e.isBoss));
+        } catch (e) { }
+
+        // Music state: boss vs normal gameplay
+        try {
+            if (window.AudioManager && typeof AudioManager.setMusicState === 'function') {
+                AudioManager.setMusicState(room.type === 'boss' ? 'boss' : 'party');
+            }
+        } catch (e) { }
+
+        try { if (typeof room.applyEntryModifiers === 'function') room.applyEntryModifiers(this); } catch (e) { }
+    },
 
     applyBlessing(blessing) {
         if (!blessing) return;
@@ -334,9 +364,12 @@ onEnterRoom(room) {
 
         const modalOpen = (window.UI && typeof UI.isBlockingOverlayOpen === 'function') ? UI.isBlockingOverlayOpen() : false;
 
-// Hard-freeze the simulation when a blocking overlay is open.
-// This guarantees the player cannot be damaged while choosing relics / UI.
-if (!this.paused && !modalOpen) {
+        // ALways check for pause toggle input, even if paused
+        this.handlePauseInput();
+
+        // Hard-freeze the simulation when a blocking overlay is open.
+        // This guarantees the player cannot be damaged while choosing relics / UI.
+        if (!this.paused && !modalOpen) {
             this.update(dt);
             this.playTime += dt;
         } else {
@@ -350,34 +383,66 @@ if (!this.paused && !modalOpen) {
         requestAnimationFrame(() => this.loop());
     },
 
+    handlePauseInput() {
+        if (Input.isKeyJustPressed('Escape')) {
+            const pauseMenu = document.getElementById('pause-menu');
+            const isCurrentlyVisible = pauseMenu && !pauseMenu.classList.contains('hidden');
 
-tickRelics(dt, room) {
-    if (!this.player) return;
+            // If a blocking overlay is open (like Shop), ESC might be handled by UI to close it.
+            // But if we are just Paused, we want to Unpause.
+            // Let's assume UI.js handles closing modals if they are open.
+            // If NO modal is open, we toggle pause.
 
-    // Broken Clock: periodic global slow
-    if (this.player.brokenClock) {
-        this.relicState.brokenClockTimer -= dt;
-        if (this.relicState.brokenClockTimer <= 0) {
-            this.relicState.brokenClockTimer = 12;
-            if (room && room.enemies) {
-                for (const e of room.enemies) {
-                    if (e && e.active && !e.isBoss) {
-                        // don't override stronger slows
-                        if (!e.slowDuration || e.slowDuration < 0.6) {
-                            e.slowDuration = 1.5;
-                            e.slowAmount = 0.55;
-                        }
-                    }
+            // However, Game.paused is distinct from Shop Modal.
+            // If Game.paused is true, we want to unpause.
+
+            if (this.paused) {
+                // Try to resume
+                this.togglePause();
+            } else {
+                // Try to pause, but only if no other blocking UI is effectively handling the input?
+                // Actually, standard behavior: ESC pauses if playing.
+                // If a modal is open, UI might catch it first?
+                // For now, let's just toggle.
+
+                // Check if UI is already handling ESC (e.g. closing shop)
+                // If a modal is open, we usually DON'T want to open the Pause Menu on top of it.
+                // But we moved the modal check in loop.
+                const modalOpen = (window.UI && typeof UI.isBlockingOverlayOpen === 'function') ? UI.isBlockingOverlayOpen() : false;
+                if (!modalOpen) {
+                    this.togglePause();
                 }
-                ParticleSystem.burst(this.player.centerX, this.player.centerY, 18, { color: '#9cf', life: 0.5, size: 4, speed: 3 });
-                AudioManager.play('pickup');
             }
         }
-    }
+    },
 
-    // Hunter Mark duration countdown handled on enemy
-    if (this.relicState.hunterMarkTimer > 0) this.relicState.hunterMarkTimer -= dt;
-},
+    tickRelics(dt, room) {
+        if (!this.player) return;
+
+        // Broken Clock: periodic global slow
+        if (this.player.brokenClock) {
+            this.relicState.brokenClockTimer -= dt;
+            if (this.relicState.brokenClockTimer <= 0) {
+                this.relicState.brokenClockTimer = 12;
+                if (room && room.enemies) {
+                    for (const e of room.enemies) {
+                        if (e && e.active && !e.isBoss) {
+                            // don't override stronger slows
+                            if (!e.slowDuration || e.slowDuration < 0.6) {
+                                e.slowDuration = 1.5;
+                                e.slowAmount = 0.55;
+                            }
+                        }
+                    }
+                    ParticleSystem.burst(this.player.centerX, this.player.centerY, 18, { color: '#9cf', life: 0.5, size: 4, speed: 3 });
+                    AudioManager.play('pickup');
+                }
+            }
+        }
+
+        // Hunter Mark duration countdown handled on enemy
+        if (this.relicState.hunterMarkTimer > 0) this.relicState.hunterMarkTimer -= dt;
+    },
 
     update(dt) {
         const room = this.dungeon.getCurrentRoom();
@@ -388,7 +453,7 @@ tickRelics(dt, room) {
             if (window.UI && typeof UI.isBlockingOverlayOpen === 'function' && UI.isBlockingOverlayOpen()) {
                 return;
             }
-        } catch (e) {}
+        } catch (e) { }
 
         if (Math.random() < 0.01) {
             this.canvasRect = this.canvas.getBoundingClientRect();
@@ -434,10 +499,7 @@ tickRelics(dt, room) {
             }
         }
 
-        // Pause
-        if (Input.isKeyJustPressed('Escape')) {
-            this.togglePause();
-        }
+        // Pause logic moved to handlePauseInput called from loop()
 
         // Codex / Achievements
         if (Input.isKeyJustPressed('KeyC')) {
@@ -445,7 +507,7 @@ tickRelics(dt, room) {
                 if (window.UI && typeof UI.toggleCodex === 'function') {
                     UI.toggleCodex();
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // Check death
@@ -473,7 +535,7 @@ tickRelics(dt, room) {
         ParticleSystem.draw(this.ctx);
 
         // Boss HUD
-        try { this.drawBossHud(this.ctx, room); } catch (e) {}
+        try { this.drawBossHud(this.ctx, room); } catch (e) { }
 
         this.ctx.restore();
     },
@@ -486,7 +548,7 @@ tickRelics(dt, room) {
                 if (room && typeof room.isPlayerInAntiMagic === 'function' && room.isPlayerInAntiMagic(this.player)) {
                     damage = Math.max(1, Math.floor(damage * 0.55));
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
         let finalSpeed = speed;
         if (owner === 'enemy' && this.modifiers && this.modifiers.enemyProjectileSpeedMult) {
@@ -495,90 +557,90 @@ tickRelics(dt, room) {
         ProjectileManager.spawn(x, y, angle, damage, finalSpeed, range, owner, effects, runeData);
     },
 
-// =========================
-// DEMENCIAL SYSTEMS
-// =========================
-isDemencial() { return this.difficulty === 'demonic'; },
+    // =========================
+    // DEMENCIAL SYSTEMS
+    // =========================
+    isDemencial() { return this.difficulty === 'demonic'; },
 
-rollEmptyRune(source = 'chest') {
-    if (!this.isDemencial()) return null;
-    const pity = (source === 'boss') ? this.emptyRunePityBoss : this.emptyRunePityChest;
+    rollEmptyRune(source = 'chest') {
+        if (!this.isDemencial()) return null;
+        const pity = (source === 'boss') ? this.emptyRunePityBoss : this.emptyRunePityChest;
 
-    // Base chances (balanced)
-    const base = (source === 'boss') ? 18 : 6; // %
-    const pityBonus = Math.min(30, pity * ((source === 'boss') ? 6 : 3)); // grows
-    const chance = Math.min(60, base + pityBonus);
+        // Base chances (balanced)
+        const base = (source === 'boss') ? 18 : 6; // %
+        const pityBonus = Math.min(30, pity * ((source === 'boss') ? 6 : 3)); // grows
+        const chance = Math.min(60, base + pityBonus);
 
-    if (Math.random() * 100 < chance) {
-        // reset pity for that source
-        if (source === 'boss') this.emptyRunePityBoss = 0;
-        else this.emptyRunePityChest = 0;
-        return getEmptyRune();
-    }
-
-    // Increase pity
-    if (source === 'boss') this.emptyRunePityBoss++;
-    else this.emptyRunePityChest++;
-    return null;
-},
-
-shouldSpawnForgeTerminal(biomeId) {
-    if (!this.isDemencial()) return false;
-    const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
-
-    // Base chance per biome
-    const base = 0.30 + biomeIdx * 0.04; // 30% -> ~74% late
-    const pity = Math.min(0.45, this.forgePity * 0.15); // +15% per miss
-    let bonus = 0;
-
-    // More likely if player has unprogrammed empty runes
-    const unprog = (this.player && this.player.runes) ? this.player.runes.filter(r => r && r.id === 'empty_rune' && !r.programmed).length : 0;
-    if (unprog >= 1) bonus += 0.15;
-    if (unprog >= 2) bonus += 0.20;
-
-    const p = Math.min(0.90, base + pity + bonus);
-    const roll = Math.random();
-
-    // Anti-frustration: guarantee if missed 2 biomes while holding >=2 empty runes
-    if (unprog >= 2 && this.forgePity >= 2) return true;
-
-    return roll < p;
-},
-
-spawnForgeTerminalInRoom(room, biomeId) {
-    if (!room || !this.isDemencial()) return;
-    const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
-    const cost = 250 + biomeIdx * 80 + (this.ngPlusLevel || 0) * 40;
-
-    const ev = {
-        kind: 'forge',
-        x: room.bounds.x + room.bounds.width - 150,
-        y: room.bounds.y + 20,
-        w: 120,
-        h: 64,
-        used: false,
-        cost,
-        biomeId
-    };
-    room.events = room.events || [];
-    room.events.push(ev);
-},
-
-onForgeUsed() {
-    // Risk: small ambush chance
-    const room = this.dungeon ? this.dungeon.getCurrentRoom() : null;
-    if (!room) return;
-    if (Math.random() < 0.15) {
-        const enemies = (room.biome && BiomeDatabase[room.biome] && BiomeDatabase[room.biome].enemies) ? BiomeDatabase[room.biome].enemies : ['goblin'];
-        const count = 2 + Utils.random(0,1);
-        for (let i=0;i<count;i++) {
-            room.enemies.push(createEnemy(Utils.randomChoice(enemies), room.bounds.x + Utils.random(80, room.bounds.width-80), room.bounds.y + Utils.random(80, room.bounds.height-80), this.dungeon.difficultyMult));
+        if (Math.random() * 100 < chance) {
+            // reset pity for that source
+            if (source === 'boss') this.emptyRunePityBoss = 0;
+            else this.emptyRunePityChest = 0;
+            return getEmptyRune();
         }
-        room.doorOpen = false;
-        setTimeout(() => { room.doorOpen = true; }, 1200);
-        this.shake(8);
-    }
-},
+
+        // Increase pity
+        if (source === 'boss') this.emptyRunePityBoss++;
+        else this.emptyRunePityChest++;
+        return null;
+    },
+
+    shouldSpawnForgeTerminal(biomeId) {
+        if (!this.isDemencial()) return false;
+        const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
+
+        // Base chance per biome
+        const base = 0.30 + biomeIdx * 0.04; // 30% -> ~74% late
+        const pity = Math.min(0.45, this.forgePity * 0.15); // +15% per miss
+        let bonus = 0;
+
+        // More likely if player has unprogrammed empty runes
+        const unprog = (this.player && this.player.runes) ? this.player.runes.filter(r => r && r.id === 'empty_rune' && !r.programmed).length : 0;
+        if (unprog >= 1) bonus += 0.15;
+        if (unprog >= 2) bonus += 0.20;
+
+        const p = Math.min(0.90, base + pity + bonus);
+        const roll = Math.random();
+
+        // Anti-frustration: guarantee if missed 2 biomes while holding >=2 empty runes
+        if (unprog >= 2 && this.forgePity >= 2) return true;
+
+        return roll < p;
+    },
+
+    spawnForgeTerminalInRoom(room, biomeId) {
+        if (!room || !this.isDemencial()) return;
+        const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
+        const cost = 250 + biomeIdx * 80 + (this.ngPlusLevel || 0) * 40;
+
+        const ev = {
+            kind: 'forge',
+            x: room.bounds.x + room.bounds.width - 150,
+            y: room.bounds.y + 20,
+            w: 120,
+            h: 64,
+            used: false,
+            cost,
+            biomeId
+        };
+        room.events = room.events || [];
+        room.events.push(ev);
+    },
+
+    onForgeUsed() {
+        // Risk: small ambush chance
+        const room = this.dungeon ? this.dungeon.getCurrentRoom() : null;
+        if (!room) return;
+        if (Math.random() < 0.15) {
+            const enemies = (room.biome && BiomeDatabase[room.biome] && BiomeDatabase[room.biome].enemies) ? BiomeDatabase[room.biome].enemies : ['goblin'];
+            const count = 2 + Utils.random(0, 1);
+            for (let i = 0; i < count; i++) {
+                room.enemies.push(createEnemy(Utils.randomChoice(enemies), room.bounds.x + Utils.random(80, room.bounds.width - 80), room.bounds.y + Utils.random(80, room.bounds.height - 80), this.dungeon.difficultyMult));
+            }
+            room.doorOpen = false;
+            setTimeout(() => { room.doorOpen = true; }, 1200);
+            this.shake(8);
+        }
+    },
 
 
     onEnemyKilled(enemy) {
@@ -590,21 +652,21 @@ onForgeUsed() {
             this.player.onKill();
         }
 
-	        // Codex / achievements tracking
+        // Codex / achievements tracking
         try {
             if (window.Meta && typeof Meta.recordEnemyKill === 'function') {
                 Meta.recordEnemyKill(enemy.type);
             }
-        } catch (e) {}
+        } catch (e) { }
 
-	        const room = this.dungeon.getCurrentRoom();
+        const room = this.dungeon.getCurrentRoom();
 
-	        // Demencial scripted runes: OnKill hook
-	        try {
-	            if (window.RuneScript && typeof RuneScript.trigger === 'function') {
-	                RuneScript.trigger('OnKill', { eventName: 'OnKill', player: this.player, room, target: enemy, damage: enemy.maxHp || 0 });
-	            }
-	        } catch (e) {}
+        // Demencial scripted runes: OnKill hook
+        try {
+            if (window.RuneScript && typeof RuneScript.trigger === 'function') {
+                RuneScript.trigger('OnKill', { eventName: 'OnKill', player: this.player, room, target: enemy, damage: enemy.maxHp || 0 });
+            }
+        } catch (e) { }
         // Base gold
         room.spawnGold(enemy.centerX, enemy.centerY, enemy.goldValue);
 
@@ -618,7 +680,7 @@ onForgeUsed() {
                 }
                 ParticleSystem.burst(enemy.centerX, enemy.centerY, 12, { color: '#b388ff', life: 0.5, size: 4, speed: 3 });
             }
-        } catch (e) {}
+        } catch (e) { }
 
         // Relic: Elite Crown (extra gold + rare chest chance)
         try {
@@ -628,7 +690,7 @@ onForgeUsed() {
                     room.chests.push(new Chest(enemy.centerX - 12, enemy.centerY - 10, 'rare'));
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
 
         this.shake(3);
     },
@@ -651,16 +713,16 @@ onForgeUsed() {
             if (window.Meta && typeof Meta.recordBossKill === 'function') {
                 Meta.recordBossKill(boss.bossType || boss.type, this.difficulty);
             }
-        } catch (e) {}
+        } catch (e) { }
 
-	        const room = this.dungeon.getCurrentRoom();
+        const room = this.dungeon.getCurrentRoom();
 
-	        // Demencial scripted runes: treat bosses as valid OnKill triggers too
-	        try {
-	            if (window.RuneScript && typeof RuneScript.trigger === 'function') {
-	                RuneScript.trigger('OnKill', { eventName: 'OnKill', player: this.player, room, target: boss, damage: boss.maxHp || 0 });
-	            }
-	        } catch (e) {}
+        // Demencial scripted runes: treat bosses as valid OnKill triggers too
+        try {
+            if (window.RuneScript && typeof RuneScript.trigger === 'function') {
+                RuneScript.trigger('OnKill', { eventName: 'OnKill', player: this.player, room, target: boss, damage: boss.maxHp || 0 });
+            }
+        } catch (e) { }
         room.bossDefeated = true;
 
         // Spawn lots of gold
@@ -718,7 +780,7 @@ onForgeUsed() {
                 } else if (Game.isDemencial()) {
                     Game.forgePity = (Game.forgePity || 0) + 1;
                 }
-            } catch (e) {}
+            } catch (e) { }
 
         }, 1300);
 
@@ -726,43 +788,43 @@ onForgeUsed() {
     },
 
     // NEW: Loot with choice (rune vs item)
-    
-handleLootWithChoice(chestLoot) {
-    // chestLoot can be a string rarity or an object descriptor
-    const rarity = typeof chestLoot === 'string' ? chestLoot : (chestLoot?.rarity || 'common');
-    const forceLegendary = !!(typeof chestLoot === 'object' && chestLoot?.forceLegendary);
-    const bossChest = !!(typeof chestLoot === 'object' && chestLoot?.bossChest);
 
-    // Demencial: chance to drop an Empty Rune (with pity)
-    let empty = null;
-    try {
-        empty = this.rollEmptyRune(bossChest ? 'boss' : 'chest');
-    } catch (e) { empty = null; }
+    handleLootWithChoice(chestLoot) {
+        // chestLoot can be a string rarity or an object descriptor
+        const rarity = typeof chestLoot === 'string' ? chestLoot : (chestLoot?.rarity || 'common');
+        const forceLegendary = !!(typeof chestLoot === 'object' && chestLoot?.forceLegendary);
+        const bossChest = !!(typeof chestLoot === 'object' && chestLoot?.bossChest);
 
-    // Loot tuning by difficulty
-    const diff = this.difficulty || 'normal';
-    const demencial = (diff === 'demonic');
+        // Demencial: chance to drop an Empty Rune (with pity)
+        let empty = null;
+        try {
+            empty = this.rollEmptyRune(bossChest ? 'boss' : 'chest');
+        } catch (e) { empty = null; }
 
-    function upgradeRarity(r) {
-        const order = ['common','rare','epic','legendary'];
-        const idx = Math.max(0, order.indexOf(r));
-        const shift = (diff === 'hard') ? 1 : (diff === 'demonic') ? 2 : 0;
-        return order[Math.min(order.length - 1, idx + shift)];
-    }
+        // Loot tuning by difficulty
+        const diff = this.difficulty || 'normal';
+        const demencial = (diff === 'demonic');
 
-    const tunedRarity = demencial ? upgradeRarity(rarity) : (diff === 'hard' ? upgradeRarity(rarity) : rarity);
+        function upgradeRarity(r) {
+            const order = ['common', 'rare', 'epic', 'legendary'];
+            const idx = Math.max(0, order.indexOf(r));
+            const shift = (diff === 'hard') ? 1 : (diff === 'demonic') ? 2 : 0;
+            return order[Math.min(order.length - 1, idx + shift)];
+        }
 
-    const runeOption = empty ? empty : (forceLegendary ? getRandomRune('legendary') : getWeightedRandomRune(tunedRarity));
-    const itemOption = forceLegendary ? ItemDatabase.getRandomItem('legendary') : ItemDatabase.getRandomItem(tunedRarity);
+        const tunedRarity = demencial ? upgradeRarity(rarity) : (diff === 'hard' ? upgradeRarity(rarity) : rarity);
 
-    if (runeOption && itemOption) {
-        UI.showLootChoice(runeOption, itemOption);
-    } else if (runeOption) {
-        UI.handleRuneChoice(runeOption);
-    } else {
-        this.applyItem(itemOption);
-    }
-},
+        const runeOption = empty ? empty : (forceLegendary ? getRandomRune('legendary') : getWeightedRandomRune(tunedRarity));
+        const itemOption = forceLegendary ? ItemDatabase.getRandomItem('legendary') : ItemDatabase.getRandomItem(tunedRarity);
+
+        if (runeOption && itemOption) {
+            UI.showLootChoice(runeOption, itemOption);
+        } else if (runeOption) {
+            UI.handleRuneChoice(runeOption);
+        } else {
+            this.applyItem(itemOption);
+        }
+    },
 
 
     // Called by UI when loot modal closes
@@ -917,47 +979,47 @@ handleLootWithChoice(chestLoot) {
             appliedSomething = true;
         }
 
-// Max Mana bonus (permanent)
-if (item.maxManaBonus && item.maxManaBonus !== 0) {
-    this.player.maxMana += item.maxManaBonus;
-    this.player.mana += item.maxManaBonus;
-    this.player.addPassiveItem(item);
-    appliedSomething = true;
-}
+        // Max Mana bonus (permanent)
+        if (item.maxManaBonus && item.maxManaBonus !== 0) {
+            this.player.maxMana += item.maxManaBonus;
+            this.player.mana += item.maxManaBonus;
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
 
-// Mana regen bonus (multiplier)
-if (item.manaRegenBonus && item.manaRegenBonus !== 0) {
-    this.player.manaRegenMultiplier *= (1 + item.manaRegenBonus);
-    this.player.addPassiveItem(item);
-    appliedSomething = true;
-}
+        // Mana regen bonus (multiplier)
+        if (item.manaRegenBonus && item.manaRegenBonus !== 0) {
+            this.player.manaRegenMultiplier *= (1 + item.manaRegenBonus);
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
 
-// Fire rate bonus (permanent casting speed)
-if (item.fireRateBonus && item.fireRateBonus !== 0) {
-    // stored as multiplier on player
-    this.player.fireRateMult *= (1 - item.fireRateBonus);
-    this.player.addPassiveItem(item);
-    appliedSomething = true;
-}
+        // Fire rate bonus (permanent casting speed)
+        if (item.fireRateBonus && item.fireRateBonus !== 0) {
+            // stored as multiplier on player
+            this.player.fireRateMult *= (1 - item.fireRateBonus);
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
 
-// Projectile speed/range bonuses
-if (item.projectileSpeedBonus && item.projectileSpeedBonus !== 0) {
-    this.player.projectileSpeedMult *= (1 + item.projectileSpeedBonus);
-    this.player.addPassiveItem(item);
-    appliedSomething = true;
-}
-if (item.projectileRangeBonus && item.projectileRangeBonus !== 0) {
-    this.player.projectileRangeMult *= (1 + item.projectileRangeBonus);
-    this.player.addPassiveItem(item);
-    appliedSomething = true;
-}
+        // Projectile speed/range bonuses
+        if (item.projectileSpeedBonus && item.projectileSpeedBonus !== 0) {
+            this.player.projectileSpeedMult *= (1 + item.projectileSpeedBonus);
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
+        if (item.projectileRangeBonus && item.projectileRangeBonus !== 0) {
+            this.player.projectileRangeMult *= (1 + item.projectileRangeBonus);
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
 
-// Flat mana cost modifier (can be negative)
-if (typeof item.manaCostFlat === 'number' && item.manaCostFlat !== 0) {
-    this.player.manaCostFlat = (this.player.manaCostFlat || 0) + item.manaCostFlat;
-    this.player.addPassiveItem(item);
-    appliedSomething = true;
-}
+        // Flat mana cost modifier (can be negative)
+        if (typeof item.manaCostFlat === 'number' && item.manaCostFlat !== 0) {
+            this.player.manaCostFlat = (this.player.manaCostFlat || 0) + item.manaCostFlat;
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
 
         // Rune slots (permanent)
         if (item.runeSlotBonus && item.runeSlotBonus > 0) {
@@ -983,7 +1045,7 @@ if (typeof item.manaCostFlat === 'number' && item.manaCostFlat !== 0) {
 
         if (appliedSomething) {
             // Apply set thresholds (2/3, 3/3)
-            try { this.applySetBonuses(); } catch (e) {}
+            try { this.applySetBonuses(); } catch (e) { }
             AudioManager.play('pickup');
         }
     },
@@ -1011,13 +1073,13 @@ if (typeof item.manaCostFlat === 'number' && item.manaCostFlat !== 0) {
                 def.bonus2.apply(this.player);
                 flags.two = true;
                 ParticleSystem.burst(this.player.centerX, this.player.centerY, 16, { color: '#b3e5fc', life: 0.55, size: 4, speed: 3 });
-                try { AudioManager.play('pickup'); } catch (e) {}
+                try { AudioManager.play('pickup'); } catch (e) { }
             }
             if (count >= 3 && !flags.three && def.bonus3 && typeof def.bonus3.apply === 'function') {
                 def.bonus3.apply(this.player);
                 flags.three = true;
                 ParticleSystem.burst(this.player.centerX, this.player.centerY, 22, { color: '#ffd700', life: 0.65, size: 4, speed: 3 });
-                try { AudioManager.play('pickup'); } catch (e) {}
+                try { AudioManager.play('pickup'); } catch (e) { }
             }
         }
     },
@@ -1053,75 +1115,75 @@ if (typeof item.manaCostFlat === 'number' && item.manaCostFlat !== 0) {
     },
 
     hasRelic(id) {
-    return !!(this.relics && this.relics.some(r => r && r.id === id));
-},
+        return !!(this.relics && this.relics.some(r => r && r.id === id));
+    },
 
-applyRelic(relic) {
-    if (!relic) return;
-    if (this.hasRelic(relic.id)) return;
-    this.relics.push({ id: relic.id, name: relic.name, icon: relic.icon, desc: relic.desc });
-    try { if (typeof relic.apply === 'function') relic.apply(this); } catch (e) {}
-},
+    applyRelic(relic) {
+        if (!relic) return;
+        if (this.hasRelic(relic.id)) return;
+        this.relics.push({ id: relic.id, name: relic.name, icon: relic.icon, desc: relic.desc });
+        try { if (typeof relic.apply === 'function') relic.apply(this); } catch (e) { }
+    },
 
-rollNgRelicChoices() {
-    // Choose 3 distinct relics
-    const pool = (typeof RelicDatabase !== 'undefined') ? RelicDatabase.slice() : [];
-    const choices = [];
-    while (pool.length && choices.length < 3) {
-        const idx = Math.floor(Math.random() * pool.length);
-        const pick = pool.splice(idx, 1)[0];
-        choices.push(pick);
-    }
-    return choices;
-},
+    rollNgRelicChoices() {
+        // Choose 3 distinct relics
+        const pool = (typeof RelicDatabase !== 'undefined') ? RelicDatabase.slice() : [];
+        const choices = [];
+        while (pool.length && choices.length < 3) {
+            const idx = Math.floor(Math.random() * pool.length);
+            const pick = pool.splice(idx, 1)[0];
+            choices.push(pick);
+        }
+        return choices;
+    },
 
     goToNextRoom() {
-    const currentRoom = this.dungeon.getCurrentRoom();
+        const currentRoom = this.dungeon.getCurrentRoom();
 
-    // Check if this is NG+ portal from boss room
-    if (currentRoom.isNgPlusPortal) {
-        this.startNewGamePlus();
-        return;
-    }
+        // Check if this is NG+ portal from boss room
+        if (currentRoom.isNgPlusPortal) {
+            this.startNewGamePlus();
+            return;
+        }
 
-    // SAVE when passing through door
-    this.saveGameToDisk();
+        // SAVE when passing through door
+        this.saveGameToDisk();
 
-    const opts = (this.dungeon && typeof this.dungeon.getNextOptions === 'function') ? this.dungeon.getNextOptions() : [];
-    if (!opts || opts.length === 0) {
-        this.onBiomeComplete();
-        return;
-    }
+        const opts = (this.dungeon && typeof this.dungeon.getNextOptions === 'function') ? this.dungeon.getNextOptions() : [];
+        if (!opts || opts.length === 0) {
+            this.onBiomeComplete();
+            return;
+        }
 
-    const doTransition = (nextRoom) => {
-        if (!nextRoom) return;
+        const doTransition = (nextRoom) => {
+            if (!nextRoom) return;
 
-        // If we go forward, spawn from bottom
-        this.player.x = this.width / 2 - this.player.width / 2;
-        this.player.y = this.height - 80;
-        this.player.direction = 'up';
+            // If we go forward, spawn from bottom
+            this.player.x = this.width / 2 - this.player.width / 2;
+            this.player.y = this.height - 80;
+            this.player.direction = 'up';
 
-        ProjectileManager.clear();
-        ParticleSystem.clear();
+            ProjectileManager.clear();
+            ParticleSystem.clear();
 
-        // Save entry state for new room
-        this.saveRoomEntryState();
+            // Save entry state for new room
+            this.saveRoomEntryState();
 
-        // Apply per-room difficulty/events
-        this.onEnterRoom(nextRoom);
-    };
+            // Apply per-room difficulty/events
+            this.onEnterRoom(nextRoom);
+        };
 
-    if (opts.length === 1) {
-        const nextRoom = (typeof this.dungeon.moveTo === 'function') ? this.dungeon.moveTo(opts[0]) : this.dungeon.nextRoom();
+        if (opts.length === 1) {
+            const nextRoom = (typeof this.dungeon.moveTo === 'function') ? this.dungeon.moveTo(opts[0]) : this.dungeon.nextRoom();
+            doTransition(nextRoom);
+            return;
+        }
+
+        // Multiple paths: DISABLED (linear dungeon). Always take the first option.
+        const pick = opts[0];
+        const nextRoom = (typeof this.dungeon.moveTo === 'function') ? this.dungeon.moveTo(pick) : this.dungeon.nextRoom();
         doTransition(nextRoom);
-        return;
-    }
-
-    // Multiple paths: DISABLED (linear dungeon). Always take the first option.
-    const pick = opts[0];
-    const nextRoom = (typeof this.dungeon.moveTo === 'function') ? this.dungeon.moveTo(pick) : this.dungeon.nextRoom();
-    doTransition(nextRoom);
-},
+    },
 
     goToPreviousRoom() {
         const currentRoom = this.dungeon ? this.dungeon.getCurrentRoom() : null;
@@ -1129,11 +1191,11 @@ rollNgRelicChoices() {
 
         // Only allow backtracking if cleared and not in a boss fight
         if (!currentRoom.cleared || currentRoom.type === 'boss' || currentRoom._inBossFight) {
-            try { AudioManager.play('menuHover'); } catch (e) {}
+            try { AudioManager.play('menuHover'); } catch (e) { }
             return;
         }
         if (!this.dungeon || typeof this.dungeon.back !== 'function' || !this.dungeon.canGoBack()) {
-            try { AudioManager.play('menuHover'); } catch (e) {}
+            try { AudioManager.play('menuHover'); } catch (e) { }
             return;
         }
 
@@ -1162,7 +1224,7 @@ rollNgRelicChoices() {
             if (window.Meta && typeof Meta.recordNgPlus === 'function') {
                 Meta.recordNgPlus(this.ngPlusLevel);
             }
-        } catch (e) {}
+        } catch (e) { }
 
         // Save progress
         this.saveGameToDisk();
@@ -1175,21 +1237,21 @@ rollNgRelicChoices() {
         this.dungeon = new Dungeon(this.currentBiome, this.difficulty, this.ngPlusLevel);
 
 
-// NEW NG relic draft: choose 1 of 3 (only here; never in chests/shops)
-try {
-    const choices = this.rollNgRelicChoices();
-    this.paused = true;
-    if (window.UI && typeof UI.showRelicDraft === 'function') {
-        UI.showRelicDraft(choices, (picked) => {
-            this.applyRelic(picked);
-            this.paused = false;
-        });
-    } else {
-        // Fallback: auto-pick
-        this.applyRelic(choices[0]);
-        this.paused = false;
-    }
-} catch (e) {}
+        // NEW NG relic draft: choose 1 of 3 (only here; never in chests/shops)
+        try {
+            const choices = this.rollNgRelicChoices();
+            this.paused = true;
+            if (window.UI && typeof UI.showRelicDraft === 'function') {
+                UI.showRelicDraft(choices, (picked) => {
+                    this.applyRelic(picked);
+                    this.paused = false;
+                });
+            } else {
+                // Fallback: auto-pick
+                this.applyRelic(choices[0]);
+                this.paused = false;
+            }
+        } catch (e) { }
 
         // Reposition player
         this.player.x = this.width / 2 - this.player.width / 2;
@@ -1270,11 +1332,8 @@ try {
         AudioManager.stopMusic();
         AudioManager.startMusic(this.currentBiome);
 
-        const legendaryRune = getRandomRune('legendary');
-        const epicRune = getRandomRune('epic');
-        const rareRune = getRandomRune('rare');
-        UI.showRewardScreen([legendaryRune, epicRune, rareRune].filter(r => r));
-        this.paused = true;
+        // No free rewards on biome entry - boss killed gave rewards already
+        this.paused = false;
 
         // Save entry state
         this.saveRoomEntryState();
@@ -1297,7 +1356,7 @@ try {
                     Meta.recordDeath();
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
 
         // Run history + codex persistence (lightweight)
         try {
@@ -1316,7 +1375,7 @@ try {
 
             prev.unshift(entry);
             localStorage.setItem(histKey, JSON.stringify(prev.slice(0, 20)));
-        } catch (e) {}
+        } catch (e) { }
 
         this.running = false;
 
@@ -1385,7 +1444,7 @@ try {
                 ctx.font = '8px monospace';
                 ctx.fillText('Mutaciones: ' + muts, 80, 52);
             }
-        } catch (e) {}
+        } catch (e) { }
 
         ctx.restore();
     },

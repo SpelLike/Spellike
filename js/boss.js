@@ -10,7 +10,7 @@ class Boss extends Enemy {
 
         // Scale with difficulty.
         // NOTE: NG+ scaling is already baked into Dungeon.difficultyMult, so avoid double counting here.
-                // Extra boss tankiness (requested): make bosses much harder
+        // Extra boss tankiness (requested): make bosses much harder
         const bossHpMult = (config.isFinalBoss ? 6 : 4);
         config.hp = Math.floor(config.hp * difficultyMult * bossHpMult);
         config.damage = Math.floor(config.damage * difficultyMult);
@@ -222,7 +222,7 @@ class Boss extends Enemy {
         if ((this.laserActive || this.laserTelegraphActive) && this.state !== 'laser_windup' && this.state !== 'laser_fire') {
             this.stopLaser && this.stopLaser();
         }
-if (this.toughnessTimer > 0) this.toughnessTimer -= dt;
+        if (this.toughnessTimer > 0) this.toughnessTimer -= dt;
         if (this._burstWindow > 0) this._burstWindow -= dt;
 
         // Phase transition invulnerability
@@ -705,15 +705,15 @@ if (this.toughnessTimer > 0) this.toughnessTimer -= dt;
         // Spiral pattern
         this.bulletHellTimer -= dt;
         if (this.bulletHellTimer <= 0) {
-            this.bulletHellTimer = 0.1; // Very fast fire rate
+            this.bulletHellTimer = 0.18; // Slower fire rate for better spacing
 
             // Two spirals rotating in opposite directions
             const spiral1 = (Date.now() / 500) % (Math.PI * 2);
             const spiral2 = -(Date.now() / 500) % (Math.PI * 2);
 
-            // Spawn 4 projectiles per tick
-            for (let i = 0; i < 4; i++) {
-                const angleOffset = (i / 4) * Math.PI * 2;
+            // Spawn 3 projectiles per tick (less density)
+            for (let i = 0; i < 3; i++) {
+                const angleOffset = (i / 3) * Math.PI * 2; // More spacing between bullets
 
                 // Spiral 1
                 Game.spawnProjectile(
@@ -816,54 +816,54 @@ if (this.toughnessTimer > 0) this.toughnessTimer -= dt;
         }
     }
 
-takeDamage(amount, knockbackAngle = 0, knockbackForce = 0) {
-    if (this.isInvulnerable) {
-        ParticleSystem.burst(this.centerX, this.centerY, 3, {
-            color: '#ffffff', life: 0.2, size: 2, speed: 2
-        });
+    takeDamage(amount, knockbackAngle = 0, knockbackForce = 0) {
+        if (this.isInvulnerable) {
+            ParticleSystem.burst(this.centerX, this.centerY, 3, {
+                color: '#ffffff', life: 0.2, size: 2, speed: 2
+            });
+            return false;
+        }
+
+        // Burst tracking over ~1.2s to prevent instakill
+        if (this._burstWindow <= 0) {
+            this._burstWindow = 1.2;
+            this._burstDamage = 0;
+        }
+
+        // Base final damage
+        let final = Math.max(0, Math.floor(amount * (this.damageTakenMult || 1)));
+
+        // Toughness active => reduce burst damage
+        if (this.toughnessTimer > 0) {
+            final = Math.max(1, Math.floor(final * (1 - this.toughnessReduce)));
+        }
+
+        this._burstDamage += final;
+
+        // Trigger toughness if too much HP removed quickly
+        if (this._burstDamage / this.maxHp > this.toughnessThreshold) {
+            this.toughnessTimer = Math.max(this.toughnessTimer, 0.9);
+            this._burstDamage = Math.floor(this._burstDamage * 0.35);
+        }
+
+        // Apply damage + reduced knockback
+        this.hp -= final;
+        if (knockbackForce > 0) {
+            this.knockbackVx = Math.cos(knockbackAngle) * knockbackForce * 0.2;
+            this.knockbackVy = Math.sin(knockbackAngle) * knockbackForce * 0.2;
+        }
+
+        ParticleSystem.hit(this.centerX, this.centerY, '#ffffff');
+        AudioManager.play('hit');
+
+        if (this.hp <= 0) {
+            this.die();
+            return true;
+        }
         return false;
     }
 
-    // Burst tracking over ~1.2s to prevent instakill
-    if (this._burstWindow <= 0) {
-        this._burstWindow = 1.2;
-        this._burstDamage = 0;
-    }
-
-    // Base final damage
-    let final = Math.max(0, Math.floor(amount * (this.damageTakenMult || 1)));
-
-    // Toughness active => reduce burst damage
-    if (this.toughnessTimer > 0) {
-        final = Math.max(1, Math.floor(final * (1 - this.toughnessReduce)));
-    }
-
-    this._burstDamage += final;
-
-    // Trigger toughness if too much HP removed quickly
-    if (this._burstDamage / this.maxHp > this.toughnessThreshold) {
-        this.toughnessTimer = Math.max(this.toughnessTimer, 0.9);
-        this._burstDamage = Math.floor(this._burstDamage * 0.35);
-    }
-
-    // Apply damage + reduced knockback
-    this.hp -= final;
-    if (knockbackForce > 0) {
-        this.knockbackVx = Math.cos(knockbackAngle) * knockbackForce * 0.2;
-        this.knockbackVy = Math.sin(knockbackAngle) * knockbackForce * 0.2;
-    }
-
-    ParticleSystem.hit(this.centerX, this.centerY, '#ffffff');
-    AudioManager.play('hit');
-
-    if (this.hp <= 0) {
-        this.die();
-        return true;
-    }
-    return false;
-}
-
-die() {
+    die() {
         this.active = false;
 
         // Epic death effect
