@@ -194,7 +194,7 @@ const ItemDatabase = {
         // Healing items
         this.register(new Item({
             id: 'small_potion', name: 'Poción Pequeña', icon: '🧪',
-            desc: 'Restaura 20 HP', type: 'heal', rarity: 'common', heal: 20
+            desc: 'Cura 20 HP (instantáneo)', type: 'item', rarity: 'common', heal: 20
         }));
         this.register(new Item({
             id: 'med_potion', name: 'Poción Mediana', icon: '🧴',
@@ -207,6 +207,12 @@ const ItemDatabase = {
         this.register(new Item({
             id: 'elixir', name: 'Elixir de Vida', icon: '💎',
             desc: 'Restaura toda tu HP', type: 'heal', rarity: 'legendary', heal: 999
+        }));
+
+        // Mana potion (shop)
+        this.register(new Item({
+            id: 'mana_potion', name: 'Poción de Maná', icon: '🔷',
+            desc: 'Restaura 40 Maná (instantáneo)', type: 'item', rarity: 'common', manaRestore: 40
         }));
 
         // Legendary stat items (for boss rewards / late game)
@@ -276,8 +282,14 @@ const ItemDatabase = {
         }));
         this.register(new Item({
             id: 'healing_totem', name: 'Totem de Curación', icon: '🌿',
-            desc: 'Cura 40 HP instantáneo. [F]', type: 'active', rarity: 'epic',
+            desc: 'Cura 20 HP (2 veces por sala). [F]', type: 'active', rarity: 'epic',
             cooldown: 18, activeEffect: 'heal', shopOnly: true
+        }));
+
+        // Mana potion (shop consumable)
+        this.register(new Item({
+            id: 'mana_potion', name: 'Poción de Maná', icon: '🔷',
+            desc: 'Restaura 30 Maná', type: 'mana', rarity: 'common', manaRestore: 30
         }));
 
 // ===========================

@@ -34,7 +34,11 @@ class Dungeon {
 
     getRoomMult(roomStep = 0) {
         let mult = this.difficultyMult;
-        const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(this.biome)) : 0;
+        // IMPORTANT: biome scaling should NOT reset when looping biomes in NG+.
+        // We treat NG+ loops as extra "virtual" biome sets.
+        const baseIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(this.biome)) : 0;
+        const loops = Math.max(0, this.ngPlusLevel || 0);
+        const biomeIdx = baseIdx + (window.BiomeOrder ? BiomeOrder.length * loops : 0);
         if (this.difficulty === 'demonic') mult *= (1 + biomeIdx * 0.07 + roomStep * 0.03);
         else if (this.difficulty === 'hard') mult *= (1 + biomeIdx * 0.04 + roomStep * 0.015);
         return mult;

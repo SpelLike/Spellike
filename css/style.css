@@ -295,6 +295,9 @@ body {
     font-size: 64px;
     animation: float 3s ease-in-out infinite;
     filter: drop-shadow(0 0 20px var(--primary));
+    /* Center image-based logo as well as emoji */
+    display: flex;
+    justify-content: center;
 }
 
 @keyframes float {
@@ -390,6 +393,17 @@ body {
     right: 20px;
     font-size: 8px;
     color: var(--text-dim);
+}
+
+/* Meta currency HUD (bottom-right, above version) */
+.meta-essence-inline {
+    position: fixed;
+    bottom: 34px;
+    right: 20px;
+    font-size: 9px;
+    color: #f5d76e;
+    text-shadow: 0 0 6px rgba(245, 215, 110, 0.25);
+    pointer-events: none;
 }
 
 /* Audio autoplay policy hint (browsers require a user gesture) */
@@ -1766,4 +1780,99 @@ body {
     .controls-info {
         grid-template-columns: 1fr;
     }
+}
+
+.logo-icon-img{
+    width:64px;
+    height:64px;
+    image-rendering: pixelated;
+    display:block;
+}
+
+/* =============================
+   Meta Upgrades (v0.1.2)
+   ============================= */
+.meta-essence {
+    margin-top: 8px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    color: #ffd54a;
+    text-shadow: 0 0 8px rgba(255, 213, 74, 0.35);
+}
+
+.meta-shop-list {
+    width: min(760px, 94vw);
+    margin: 18px auto 0 auto;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    background: rgba(0,0,0,0.35);
+    border: 2px solid rgba(255, 213, 74, 0.25);
+    border-radius: 10px;
+}
+
+.meta-upgrade-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px;
+    background: rgba(15, 10, 35, 0.75);
+    border: 2px solid rgba(150, 110, 255, 0.35);
+    border-radius: 10px;
+}
+
+.meta-upgrade-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.meta-upgrade-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    color: #ffffff;
+    text-shadow: 0 0 8px rgba(160, 120, 255, 0.25);
+}
+
+.meta-upgrade-desc {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.35;
+}
+
+.meta-upgrade-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.meta-upgrade-level {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.85);
+}
+
+.meta-buy-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 2px solid rgba(255, 213, 74, 0.6);
+    background: rgba(255, 213, 74, 0.15);
+    color: #ffd54a;
+    cursor: pointer;
+}
+
+.meta-buy-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.menu-btn.small {
+    font-size: 12px;
+    padding: 12px 18px;
 }

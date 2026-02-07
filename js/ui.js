@@ -20,6 +20,7 @@ const UI = {
         this.screens = {
             'main-menu': document.getElementById('main-menu'),
             'feedback-screen': document.getElementById('feedback-screen'),
+            'meta-screen': document.getElementById('meta-screen'),
             'slot-select': document.getElementById('slot-select'),
             'difficulty-select': document.getElementById('difficulty-select'),
             'settings-screen': document.getElementById('settings-screen'),
@@ -28,6 +29,7 @@ const UI = {
         };
 
         this.setupMenuEvents();
+        this.setupMetaEvents();
         this.setupFeedbackEvents();
         this.setupSettingsEvents();
         this.setupSlotEvents();
@@ -196,6 +198,119 @@ const UI = {
             const opt = document.getElementById('opt-negative-events');
             if (opt && typeof opt.checked === 'boolean') opt.checked = true;
         }
+
+        // Update meta currency display on any screen change
+        if (typeof this.updateMetaEssenceUI === 'function') {
+            this.updateMetaEssenceUI();
+        }
+        if (screenId === 'meta-screen') {
+            if (typeof this.renderMetaShop === 'function') this.renderMetaShop();
+        }
+    },
+
+    updateMetaEssenceUI() {
+        const val = (window.Meta && typeof Meta.getEssence === 'function') ? Meta.getEssence() : 0;
+        const small = document.getElementById('meta-essence');
+        if (small) small.textContent = `Esencia: ${val}`;
+        const big = document.getElementById('meta-screen-essence');
+        if (big) big.textContent = `Esencia: ${val}`;
+    },
+
+    renderMetaShop() {
+        const root = document.getElementById('meta-shop-list');
+        if (!root) return;
+        const val = (window.Meta && typeof Meta.getEssence === 'function') ? Meta.getEssence() : 0;
+        const defs = [
+            {
+                key: 'shop_slots',
+                title: 'Más slots en tienda',
+                desc: 'Reduce la tienda a 4 y desbloquea hasta 8 slots.',
+                value: () => {
+                    const slots = (window.Meta && Meta.getShopSlots) ? Meta.getShopSlots() : 4;
+                    return `${slots}/8 slots`;
+                }
+            },
+            {
+                key: 'shop_rerolls',
+                title: 'Rerolls de tienda',
+                desc: 'Más rerolls por tienda (máx 4).',
+                value: () => {
+                    const rr = (window.Meta && Meta.getShopRerolls) ? Meta.getShopRerolls() : 1;
+                    return `${rr}/4 rerolls`;
+                }
+            },
+            {
+                key: 'luck',
+                title: 'Suerte',
+                desc: 'Aumenta chances de items/runes mejores (máx 20%).',
+                value: () => {
+                    const pct = (window.Meta && Meta.getLuckPct) ? Meta.getLuckPct() : 0.05;
+                    return `${Math.round(pct*100)}%/20%`;
+                }
+            },
+            {
+                key: 'dash',
+                title: 'Dash extra',
+                desc: 'Hasta 3 dashes en cadena. Se recargan con el tiempo.',
+                value: () => {
+                    const d = (window.Meta && Meta.getDashCharges) ? Meta.getDashCharges() : 1;
+                    return `${d}/3 cargas`;
+                }
+            }
+        ];
+
+        const mkCard = (d) => {
+            const lvl = (window.Meta && Meta.getUpgradeLevel) ? Meta.getUpgradeLevel(d.key) : 1;
+            const max = (window.Meta && Meta.getUpgradeMaxLevel) ? Meta.getUpgradeMaxLevel(d.key) : lvl;
+            const cost = (window.Meta && Meta.getUpgradeCost) ? Meta.getUpgradeCost(d.key) : 999;
+            const canBuy = (window.Meta && Meta.canBuyUpgrade) ? Meta.canBuyUpgrade(d.key) : false;
+            const isMax = lvl >= max;
+
+            const card = document.createElement('div');
+            card.className = 'meta-upgrade-card';
+
+            const info = document.createElement('div');
+            info.className = 'meta-upgrade-info';
+            const title = document.createElement('div');
+            title.className = 'meta-upgrade-title';
+            title.textContent = d.title;
+            const desc = document.createElement('div');
+            desc.className = 'meta-upgrade-desc';
+            desc.textContent = d.desc;
+            info.appendChild(title);
+            info.appendChild(desc);
+
+            const right = document.createElement('div');
+            right.className = 'meta-upgrade-right';
+            const level = document.createElement('div');
+            level.className = 'meta-upgrade-level';
+            level.textContent = `Nivel ${lvl}/${max} • ${d.value()}`;
+
+            const btn = document.createElement('button');
+            btn.className = 'meta-buy-btn';
+            btn.disabled = isMax || !canBuy;
+            btn.textContent = isMax ? 'MAX' : `COMPRAR (${cost})`;
+            btn.onclick = () => {
+                AudioManager.play('menuClick');
+                if (window.Meta && typeof Meta.buyUpgrade === 'function') {
+                    const ok = Meta.buyUpgrade(d.key);
+                    if (ok) {
+                        this.updateMetaEssenceUI();
+                        this.renderMetaShop();
+                    }
+                }
+            };
+
+            right.appendChild(level);
+            right.appendChild(btn);
+
+            card.appendChild(info);
+            card.appendChild(right);
+            return card;
+        };
+
+        root.innerHTML = '';
+        defs.forEach(d => root.appendChild(mkCard(d)));
     },
     // Lock/unlock difficulties based on meta progression
     updateDifficultyLocks() {
@@ -284,6 +399,16 @@ const UI = {
             };
         }
 
+        // Meta upgrades (permanent)
+        const metaBtn = document.getElementById('btn-meta');
+        if (metaBtn) {
+            metaBtn.onclick = () => {
+                AudioManager.play('menuClick');
+                this.showScreen('meta-screen');
+                if (typeof this.renderMetaShop === 'function') this.renderMetaShop();
+            };
+        }
+
         document.getElementById('btn-quit').onclick = () => {
             AudioManager.play('menuClick');
             if (confirm('¿Salir del juego?')) window.close();
@@ -292,6 +417,16 @@ const UI = {
         document.querySelectorAll('.menu-btn').forEach(btn => {
             btn.onmouseenter = () => AudioManager.play('menuHover');
         });
+    },
+
+    setupMetaEvents() {
+        const back = document.getElementById('btn-meta-back');
+        if (back) {
+            back.onclick = () => {
+                AudioManager.play('menuClick');
+                this.showScreen('main-menu');
+            };
+        }
     },
 
     setupFeedbackEvents() {
@@ -1192,6 +1327,20 @@ ${template}
         }, 3600);
     },
 
+    // Generic small toast (used for quick feedback like "tótem agotado")
+    toastMessage(msg) {
+        try {
+            const prev = document.querySelector('.ad-toast');
+            if (prev) prev.remove();
+
+            const t = document.createElement('div');
+            t.className = 'ad-toast';
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => { try { t.remove(); } catch (e) { } }, 1500);
+        } catch (e) { }
+    },
+
     // ===========================
     // RUNE TOOLTIPS
     // ===========================
@@ -1248,6 +1397,14 @@ ${template}
     showLootChoice(runeOption, itemOption) {
         Game.paused = true;
 
+        // If a previous loot modal exists (e.g., coming back from swap cancel), remove it.
+        try { if (this.lootModal) this.lootModal.remove(); } catch (e) {}
+        this.lootModal = null;
+
+        // Keep the current loot options so swap-cancel can return here instead of
+        // closing the chest flow.
+        this._lastLootOptions = { runeOption, itemOption };
+
         const modal = document.createElement('div');
         modal.id = 'loot-modal';
         modal.className = 'loot-modal';
@@ -1278,7 +1435,7 @@ ${template}
         this.lootModal = modal;
 
         document.getElementById('choose-rune').onclick = () => {
-            this.handleRuneChoice(runeOption);
+            this.handleRuneChoice(runeOption, 'loot');
         };
 
         document.getElementById('choose-item').onclick = () => {
@@ -1291,7 +1448,9 @@ ${template}
         };
     },
 
-    handleRuneChoice(rune) {
+    // source: 'loot' | 'shop'
+    handleRuneChoice(rune, source = 'loot') {
+        this._runeChoiceSource = source;
         // Check if player has empty slot
         const emptySlot = Game.player.runes.findIndex(r => r === null);
 
@@ -1357,7 +1516,42 @@ ${template}
         });
 
         document.getElementById('cancel-swap').onclick = () => {
-            this.closeLootModal();
+            // Cancel behavior depends on where the rune came from.
+            // - Loot chest: go back to Rune vs Item choice.
+            // - Shop: just close the swap dialog and return to the shop.
+            // - Boss reward: return to the boss reward screen.
+
+            try { if (this.lootModal) this.lootModal.remove(); } catch (e) {}
+            this.lootModal = null;
+
+            if (this._runeChoiceSource === 'shop') {
+                AudioManager.play('menuClick');
+                return;
+            }
+
+            if (this._runeChoiceSource === 'boss') {
+                AudioManager.play('menuClick');
+                try {
+                    // Keep the game paused while choosing boss rewards
+                    if (window.Game) Game.paused = true;
+                    const r = this._lastRewardScreenRewards;
+                    if (r && Array.isArray(r) && r.length) {
+                        this.showRewardScreen(r);
+                        return;
+                    }
+                } catch (e) {}
+                // Fallback: just close
+                this.closeLootModal();
+                return;
+            }
+
+            const opts = this._lastLootOptions;
+            if (opts && opts.runeOption && opts.itemOption) {
+                AudioManager.play('menuClick');
+                this.showLootChoice(opts.runeOption, opts.itemOption);
+            } else {
+                this.closeLootModal();
+            }
         };
     },
 
@@ -1622,6 +1816,7 @@ ${template}
                 const name = entry.kind === 'rune' ? entry.rune.name : entry.item.name;
                 const desc = entry.kind === 'rune' ? (entry.rune.desc || '') : (entry.item.desc || entry.item.effect || '');
                 const rarity = entry.kind === 'rune' ? (entry.rune.rarity || 'common') : (entry.item.rarity || 'common');
+                const kindLabel = entry.kind === 'rune' ? 'RUNA' : 'ITEM';
 
                 const locked = !!entry.locked;
 
@@ -1634,6 +1829,7 @@ ${template}
                     <div class="reward-card ${rarity} ${sold ? 'sold' : ''}" style="cursor:${sold ? 'not-allowed' : 'pointer'}" data-idx="${idx}">
                         <div class="reward-icon">${icon}</div>
                         <div class="reward-name">${name}</div>
+                        <div class="reward-desc" style="margin-top:4px; opacity:0.85; font-size:10px; letter-spacing:1px">${kindLabel}</div>
                         <div class="reward-desc">${desc}</div>
                         <div class="reward-desc" style="margin-top:6px; opacity:0.9">💰 ${price}</div>
                         <button class="action-btn" style="margin-top:8px; padding:8px 12px; font-size:12px" ${sold || !canAfford ? 'disabled' : ''}>
@@ -1654,6 +1850,16 @@ ${template}
                     🔄 REROLL (${shop.rerollsLeft || 0})
                 </button>` : '';
 
+            const recyclerBtn = `
+                <button class="action-btn" id="open-recycler" style="margin:6px 6px 0 0; padding:8px 12px; font-size:12px">
+                    ♻️ RECICLAR
+                </button>`;
+
+            const sellerBtn = `
+                <button class="action-btn" id="open-seller" style="margin:6px 6px 0 0; padding:8px 12px; font-size:12px">
+                    💱 VENDER
+                </button>`;
+
             modal.innerHTML = `
                 <div class="loot-content">
                     <h2>${title}</h2>
@@ -1661,6 +1867,8 @@ ${template}
                     <p style="margin:0 0 10px 0; opacity:0.9">Oro: 💰 ${Game.player.gold}</p>
                     <div style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap">
                         ${rerollBtn}
+                        ${recyclerBtn}
+                        ${sellerBtn}
                     </div>
                     <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px">
                         ${itemsHtml}
@@ -1671,6 +1879,18 @@ ${template}
 
             const reroll = modal.querySelector('#reroll-shop');
             if (reroll) reroll.onclick = () => { AudioManager.play('menuClick'); rerollShop(); render(); };
+
+            const btnRec = modal.querySelector('#open-recycler');
+            if (btnRec) btnRec.onclick = () => {
+                AudioManager.play('menuClick');
+                this.showExchangeModal('recycle', () => render());
+            };
+
+            const btnSell = modal.querySelector('#open-seller');
+            if (btnSell) btnSell.onclick = () => {
+                AudioManager.play('menuClick');
+                this.showExchangeModal('sell', () => render());
+            };
 
             modal.querySelectorAll('[data-lock]').forEach(btn => {
                 btn.onclick = (e) => {
@@ -1702,7 +1922,7 @@ ${template}
                     entry.sold = true;
 
                     if (entry.kind === 'rune') {
-                        UI.handleRuneChoice({ ...entry.rune });
+                        UI.handleRuneChoice({ ...entry.rune }, 'shop');
                     } else {
                         Game.handleLoot({ ...entry.item });
                     }
@@ -1732,6 +1952,150 @@ ${template}
         document.body.appendChild(modal);
         this.shopModal = modal;
         render();
+    },
+
+    // mode: 'recycle' | 'sell'
+    showExchangeModal(mode = 'recycle', onDone = null) {
+        // Close existing exchange modal
+        try { if (this.exchangeModal) this.exchangeModal.remove(); } catch (e) {}
+        this.exchangeModal = null;
+
+        const modal = document.createElement('div');
+        modal.id = 'loot-modal';
+        modal.className = 'loot-modal';
+
+        const p = Game.player;
+
+        // Build selectable entries: runes + active items
+        const entries = [];
+        (p.runes || []).forEach((r, idx) => {
+            if (!r) return;
+            // Skip placeholder/empty runes
+            if (r.id === 'empty_rune') return;
+            entries.push({ kind: 'rune', idx, obj: r, rarity: (r.rarity || 'common') });
+        });
+        (p.activeItems || []).forEach((it, idx) => {
+            if (!it) return;
+            entries.push({ kind: 'active', idx, obj: it, rarity: (it.rarity || 'rare') });
+        });
+
+        const title = mode === 'sell' ? '💱 VENDER' : '♻️ RECICLAR';
+        const hint = mode === 'sell'
+            ? 'Elige una Runa o Activo para vender por oro.'
+            : 'Elige una Runa o Activo para reciclar: te da otro de la misma calidad.';
+
+        // Gold values
+        const runeSellValue = (rarity) => {
+            switch ((rarity || 'common').toLowerCase()) {
+                case 'legendary': return 350;
+                case 'epic': return 220;
+                case 'rare': return 130;
+                default: return 70;
+            }
+        };
+        const activeSellValue = (rarity) => {
+            switch ((rarity || 'rare').toLowerCase()) {
+                case 'legendary': return 420;
+                case 'epic': return 320;
+                default: return 200;
+            }
+        };
+
+        let listHtml = '';
+        if (!entries.length) {
+            listHtml = `<p style="opacity:0.85">No tenés runas/activos para ${mode === 'sell' ? 'vender' : 'reciclar'}.</p>`;
+        } else {
+            entries.forEach((e, i) => {
+                const icon = e.obj.icon || '❓';
+                const name = e.obj.name || 'Sin nombre';
+                const kind = e.kind === 'rune' ? 'RUNA' : 'ACTIVO';
+                const rarity = (e.rarity || 'common');
+                const value = e.kind === 'rune' ? runeSellValue(rarity) : activeSellValue(rarity);
+                const extra = mode === 'sell' ? `💰 ${value}` : `🎲 ${rarity.toUpperCase()}`;
+                listHtml += `
+                    <div class="reward-card ${rarity}" style="cursor:pointer; min-width:220px" data-ex="${i}">
+                        <div class="reward-icon">${icon}</div>
+                        <div class="reward-name">${name}</div>
+                        <div class="reward-desc" style="margin-top:4px; opacity:0.85; font-size:10px; letter-spacing:1px">${kind}</div>
+                        <div class="reward-desc" style="margin-top:6px; opacity:0.9">${extra}</div>
+                        <button class="action-btn" style="margin-top:8px; padding:8px 12px; font-size:12px">
+                            ${mode === 'sell' ? 'VENDER' : 'RECICLAR'}
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        modal.innerHTML = `
+            <div class="loot-content">
+                <h2>${title}</h2>
+                <p style="margin:0 0 10px 0; opacity:0.9">${hint}</p>
+                <p style="margin:0 0 10px 0; opacity:0.9">Oro: 💰 ${p.gold}</p>
+                <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px">
+                    ${listHtml}
+                </div>
+                <button class="discard-btn" id="close-exchange">Cerrar</button>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        this.exchangeModal = modal;
+
+        const close = modal.querySelector('#close-exchange');
+        if (close) close.onclick = () => {
+            try { modal.remove(); } catch (e) {}
+            this.exchangeModal = null;
+            if (typeof onDone === 'function') onDone();
+        };
+
+        modal.querySelectorAll('[data-ex]').forEach(card => {
+            const i = parseInt(card.dataset.ex);
+            const entry = entries[i];
+            const btn = card.querySelector('button');
+            if (!btn) return;
+            btn.onclick = (ev) => {
+                ev.stopPropagation();
+                if (!entry) return;
+
+                if (mode === 'sell') {
+                    if (entry.kind === 'rune') {
+                        const v = runeSellValue(entry.rarity);
+                        p.gold += v;
+                        p.equipRune(null, entry.idx);
+                    } else {
+                        const v = activeSellValue(entry.rarity);
+                        p.gold += v;
+                        p.activeItems[entry.idx] = null;
+                        p.activeCooldowns[entry.idx] = 0;
+                    }
+                    AudioManager.play('pickup');
+                    this.toastMessage('💰 Venta realizada');
+                } else {
+                    if (entry.kind === 'rune') {
+                        const r = getRandomRune(entry.rarity || 'common');
+                        if (r) {
+                            p.equipRune({ ...r, rarity: (entry.rarity || r.rarity || 'common') }, entry.idx);
+                            AudioManager.play('pickup');
+                            this.toastMessage('♻️ Runa reciclada');
+                        }
+                    } else {
+                        const pool = ['blink_stone', 'smoke_bomb', 'healing_totem'].map(id => ItemDatabase.get(id)).filter(Boolean);
+                        if (pool.length) {
+                            const newIt = { ...Utils.randomChoice(pool), type: 'active' };
+                            p.activeItems[entry.idx] = newIt;
+                            p.activeCooldowns[entry.idx] = 0;
+                            AudioManager.play('pickup');
+                            this.toastMessage('♻️ Activo reciclado');
+                        }
+                    }
+                }
+
+                // Re-render the modal (gold + list)
+                try { modal.remove(); } catch (e) {}
+                this.exchangeModal = null;
+                this.showExchangeModal(mode, onDone);
+            };
+        });
     },
 
     // =========================
@@ -1892,6 +2256,130 @@ ${template}
             this.shopModal = null;
         }
         Game.paused = false;
+    },
+
+    // =========================
+    // SHOP: RECYCLER / SELLER
+    // =========================
+    showExchangeModal(mode = 'recycle', onDone = null) {
+        // mode: 'recycle' | 'sell'
+        const p = Game.player;
+        if (!p) return;
+
+        // Build list: runes + active items (avoid permanent passive items)
+        const entries = [];
+        (p.runes || []).forEach((r, idx) => {
+            if (!r || r.id === 'empty_rune') return;
+            entries.push({ kind: 'rune', idx, icon: r.icon, name: r.name, desc: r.desc || '', rarity: r.rarity || 'common' });
+        });
+        (p.activeItems || []).forEach((it, idx) => {
+            if (!it) return;
+            entries.push({ kind: 'active', idx, icon: it.icon, name: it.name, desc: it.desc || it.effect || '', rarity: it.rarity || 'common' });
+        });
+
+        const title = (mode === 'sell') ? '💱 VENDER' : '♻️ RECICLAR';
+        const hint = (mode === 'sell')
+            ? 'Elige una runa o activo para vender por oro.'
+            : 'Elige una runa o activo para intercambiar por otro de la misma rareza.';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'loot-modal';
+        overlay.id = 'exchange-modal';
+
+        const listHtml = entries.length ? entries.map((e, i) => {
+            const tag = e.kind === 'rune' ? 'RUNA' : 'ACTIVO';
+            let sellLine = '';
+            if (mode === 'sell') {
+                let gain = 80;
+                const r = e.rarity || 'common';
+                if (r === 'rare') gain = 140;
+                if (r === 'epic') gain = 240;
+                if (r === 'legendary') gain = 420;
+                sellLine = `<div class="reward-desc" style="margin-top:6px; opacity:0.95">💰 +${gain} oro</div>`;
+            }
+            return `
+                <div class="reward-card ${e.rarity}" style="cursor:pointer" data-ex="${i}">
+                    <div class="reward-icon">${e.icon}</div>
+                    <div class="reward-name">${e.name}</div>
+                    <div class="reward-desc" style="margin-top:4px; opacity:0.85; font-size:10px; letter-spacing:1px">${tag}</div>
+                    <div class="reward-desc">${e.desc}</div>
+                    ${sellLine}
+                </div>
+            `;
+        }).join('') : `<div style="opacity:0.8; padding:12px">No tenés runas/activos para ${mode === 'sell' ? 'vender' : 'reciclar'}.</div>`;
+
+        overlay.innerHTML = `
+            <div class="loot-content">
+                <h2>${title}</h2>
+                <p style="margin:0 0 10px 0; opacity:0.9">${hint}</p>
+                <p style="margin:0 0 10px 0; opacity:0.9">Oro: 💰 ${p.gold}</p>
+                <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px">
+                    ${listHtml}
+                </div>
+                <button class="discard-btn" id="close-exchange">Volver</button>
+            </div>
+        `;
+
+        const close = () => {
+            try { overlay.remove(); } catch (e) { }
+            if (typeof onDone === 'function') onDone();
+        };
+
+        overlay.querySelector('#close-exchange').onclick = () => { AudioManager.play('menuClick'); close(); };
+
+        overlay.querySelectorAll('[data-ex]').forEach(card => {
+            card.onclick = () => {
+                const pick = entries[parseInt(card.dataset.ex)];
+                if (!pick) return;
+
+                if (mode === 'sell') {
+                    let gain = 80;
+                    const r = pick.rarity || 'common';
+                    if (r === 'rare') gain = 140;
+                    if (r === 'epic') gain = 240;
+                    if (r === 'legendary') gain = 420;
+
+                    if (pick.kind === 'rune') {
+                        p.runes[pick.idx] = null;
+                    } else if (pick.kind === 'active') {
+                        p.activeItems[pick.idx] = null;
+                        p.activeCooldowns[pick.idx] = 0;
+                    }
+                    p.gold += gain;
+                    try { if (window.UI && typeof UI.toastMessage === 'function') UI.toastMessage(`+${gain} oro`); } catch (e) {}
+                    AudioManager.play('pickup');
+                    close();
+                    return;
+                }
+
+                // recycle
+                if (pick.kind === 'rune') {
+                    const rarity = pick.rarity || 'common';
+                    const newRune = (typeof getRandomRune === 'function') ? getRandomRune(rarity) : null;
+                    if (newRune) {
+                        p.equipRune({ ...newRune, rarity }, pick.idx);
+                        AudioManager.play('pickup');
+                    }
+                    close();
+                    return;
+                }
+
+                if (pick.kind === 'active') {
+                    const pool = ['blink_stone', 'smoke_bomb', 'healing_totem']
+                        .map(id => ItemDatabase.get(id))
+                        .filter(Boolean);
+                    if (pool.length) {
+                        p.activeItems[pick.idx] = { ...Utils.randomChoice(pool), type: 'active' };
+                        p.activeCooldowns[pick.idx] = 0;
+                        AudioManager.play('pickup');
+                    }
+                    close();
+                    return;
+                }
+            };
+        });
+
+        document.body.appendChild(overlay);
     },
 
     // ===========================
@@ -2191,6 +2679,16 @@ ${template}
         document.getElementById('stat-gold').textContent = player.gold;
         document.getElementById('stat-time').textContent = Utils.formatTime(Game.playTime);
 
+        // Meta currency (v0.1.2): show essence gained this run and total
+        try {
+            const earned = Math.max(0, Math.floor(Game?._lastEssenceEarned || 0));
+            const total = (window.Meta && typeof Meta.getEssence === 'function') ? Meta.getEssence() : 0;
+            const elEarned = document.getElementById('stat-essence-earned');
+            const elTotal = document.getElementById('stat-essence-total');
+            if (elEarned) elEarned.textContent = earned;
+            if (elTotal) elTotal.textContent = total;
+        } catch (e) { }
+
         const mvpRune = player.runes.find(r => r !== null);
         document.getElementById('stat-mvp').textContent = mvpRune ? mvpRune.name : '-';
     },
@@ -2199,6 +2697,7 @@ ${template}
         const screen = document.getElementById('reward-screen');
         const container = document.getElementById('reward-options');
         container.innerHTML = '';
+        this._lastRewardScreenRewards = rewards;
 
         rewards.forEach((reward, i) => {
             if (!reward) return;
@@ -2216,7 +2715,24 @@ ${template}
             container.appendChild(card);
         });
 
-        screen.classList.remove('hidden');
+        
+        // Add discard option
+        try {
+            const discard = document.createElement('button');
+            discard.className = 'discard-btn';
+            discard.style.marginTop = '14px';
+            discard.textContent = 'Descartar';
+            discard.onclick = () => {
+                screen.classList.add('hidden');
+                Game.paused = false;
+            };
+            // avoid duplicates
+            const existing = screen.querySelector('#reward-discard-btn');
+            if (existing) existing.remove();
+            discard.id = 'reward-discard-btn';
+            screen.querySelector('.reward-content')?.appendChild(discard);
+        } catch (e) {}
+screen.classList.remove('hidden');
     },
 
     hideRewardScreen() {

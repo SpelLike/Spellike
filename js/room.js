@@ -389,14 +389,24 @@ isPlayerInAntiMagic(player) {
     }
     spawnChest(rarity = 'common') {
         const x = this.bounds.x + this.bounds.width / 2 - 12;
-        const y = this.bounds.y + this.bounds.height / 2 - 10;
+        // Move chest a bit up so it doesn't overlap with shop terminals in mixed rooms
+        const y = Utils.clamp(
+            this.bounds.y + this.bounds.height / 2 - 70,
+            this.bounds.y + 40,
+            this.bounds.y + this.bounds.height - 60
+        );
         const chest = new Chest(x, y, rarity);
         this.chests.push(chest);
     }
 
     spawnShop() {
         const x = this.bounds.x + this.bounds.width / 2 - 40;
-        const y = this.bounds.y + this.bounds.height / 2 + 40;
+        // Move shop down to keep clear separation from the center chest
+        const y = Utils.clamp(
+            this.bounds.y + this.bounds.height / 2 + 90,
+            this.bounds.y + 40,
+            this.bounds.y + this.bounds.height - 60
+        );
 
         this.shop = {
             x,
@@ -404,7 +414,7 @@ isPlayerInAntiMagic(player) {
             width: 80,
             height: 32,
             theme: 'shop',
-            rerollsLeft: 1,
+            rerollsLeft: (window.Meta && typeof Meta.getShopRerolls === 'function') ? Meta.getShopRerolls() : 1,
             allowReroll: true,
             allowLock: true,
             inventory: []
@@ -434,6 +444,28 @@ isPlayerInAntiMagic(player) {
         if (blink) this.shop.inventory.push({ kind: 'item', item: { ...blink, type: 'active' }, price: 420, sold: false, locked: false });
         if (smoke) this.shop.inventory.push({ kind: 'item', item: { ...smoke, type: 'active' }, price: 520, sold: false, locked: false });
         if (healTotem) this.shop.inventory.push({ kind: 'item', item: { ...healTotem, type: 'active' }, price: 680, sold: false, locked: false });
+
+        // Potions
+        const hpPot = ItemDatabase.get('small_potion');
+        const mpPot = ItemDatabase.get('mana_potion');
+        if (hpPot) this.shop.inventory.push({ kind: 'item', item: { ...hpPot }, price: 80, sold: false, locked: false });
+        if (mpPot) this.shop.inventory.push({ kind: 'item', item: { ...mpPot }, price: 90, sold: false, locked: false });
+
+        // Limit visible offers based on permanent upgrade (slots), keeping potions always available.
+        const maxOffers = (window.Meta && typeof Meta.getShopSlots === 'function') ? Meta.getShopSlots() : 4;
+        const isPotion = (e) => e && e.kind === 'item' && e.item && (e.item.id === 'small_potion' || e.item.id === 'mana_potion');
+        const potions = this.shop.inventory.filter(isPotion);
+        const offers = this.shop.inventory.filter(e => !isPotion(e));
+
+        // Shuffle offers for variety
+        for (let i = offers.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const t = offers[i];
+            offers[i] = offers[j];
+            offers[j] = t;
+        }
+
+        this.shop.inventory = offers.slice(0, Math.max(3, Math.min(8, maxOffers))).concat(potions);
     }
 
 
@@ -472,8 +504,10 @@ applyRunProgressScaling(game) {
         const hpM = isBoss ? (1 + (mult.hp - 1) * 0.65) : mult.hp;
         const dmgM = isBoss ? (1 + (mult.dmg - 1) * 0.55) : mult.dmg;
 
+        // IMPORTANT: scaling is applied on room entry; enemies should start at full HP.
+        // Keeping previous hp while increasing maxHp makes them look "damaged" on spawn.
         e.maxHp = Math.floor(e.maxHp * hpM);
-        e.hp = Math.min(e.hp, e.maxHp);
+        e.hp = e.maxHp;
         e.damage = Math.floor(e.damage * dmgM);
     }
 }
@@ -686,7 +720,7 @@ updateRoomModifiers(dt, player) {
                 this._hazardTick += dt;
                 if (this._hazardTick >= 0.5) {
                     this._hazardTick = 0;
-                    player.takeDamage(1);
+                    player.takeDamage(2);
                 }
             }
         }
@@ -719,7 +753,7 @@ updateRoomModifiers(dt, player) {
             p.t -= dt;
             if (p.t <= 0) {
                 // explode
-                this.explodeAt(p.x, p.y, 80, 12, player, { source: 'meteor' });
+                this.explodeAt(p.x, p.y, 80, 18, player, { source: 'meteor' });
                 met.pending.splice(i, 1);
             }
         }
@@ -752,7 +786,7 @@ updateRoomModifiers(dt, player) {
                 const distToLine = (px, py) => (l.x1 === l.x2) ? Math.abs(px - l.x1) : Math.abs(py - l.y1);
                 if (player) {
                     const dist = distToLine(player.centerX, player.centerY);
-                    if (dist < 18) player.takeDamage(10);
+                    if (dist < 18) player.takeDamage(14);
                 }
                 for (const e of this.enemies) {
                     if (!e || !e.active || e.isBoss) continue;
@@ -799,7 +833,7 @@ updateRoomModifiers(dt, player) {
                 const d = Utils.distance(player.centerX, player.centerY, t.x, t.y);
                 if (d < t.r) {
                     this._hazardTick2 += dt;
-                    if (this._hazardTick2 >= 0.45) { this._hazardTick2 = 0; player.takeDamage(2); }
+                    if (this._hazardTick2 >= 0.45) { this._hazardTick2 = 0; player.takeDamage(4); }
                 }
             }
         }
@@ -1150,8 +1184,19 @@ drawRoomModifiers(ctx, player) {
 
     onCleared(player) {
         this.cleared = true;
+        // Mark once-cleared so backtracking never re-activates enemies.
+        this._clearedOnce = true;
         this.doorOpen = true;
         player.stats.roomsCleared++;
+
+        // Reward: refill 50% of max mana on room clear (additive, capped).
+        // (Only after all enemies are dead.)
+        try {
+            if (player && typeof player.maxMana === 'number' && typeof player.mana === 'number') {
+                const add = player.maxMana * 0.5;
+                player.mana = Math.min(player.maxMana, player.mana + add);
+            }
+        } catch (e) { }
 
         // Spawn reward chest
         if (this.chests.length === 0) {

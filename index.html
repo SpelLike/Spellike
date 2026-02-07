@@ -5,13 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SpelLike - Roguelike</title>
-    <!-- App icon (replaces the default "globe" icon in the tab/window) -->
-    <link rel="icon" type="image/png" sizes="512x512" href="assets/favicon.png">
-    <link rel="apple-touch-icon" sizes="512x512" href="assets/favicon.png">
     <meta name="description"
         content="Un roguelike infinito donde combinas runas para crear builds devastadores mientras conquistas mazmorras procedurales.">
-    <link rel="stylesheet" href="css/style.css">
+        <link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/modals.css">
+    <!-- Meta upgrades hard-override (prevents menu BG from covering UI) -->
+    <link rel="stylesheet" href="css/meta_upgrades.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
@@ -22,13 +22,16 @@
         <div class="menu-background"></div>
         <div class="menu-content">
             <div class="logo-container">
-                <div class="logo-icon">🔮</div>
+                <div class="logo-icon"><img src="assets/logo_s.png" alt="SpelLike" class="logo-icon-img"></div>
                 <h1 class="game-title">SpelLike</h1>
                 <p class="tagline">Combina. Conquista. Repite hasta morir.</p>
             </div>
             <div class="menu-buttons">
                 <button class="menu-btn" id="btn-play">
                     <span class="btn-icon">▶</span> INICIAR PARTIDA
+                </button>
+                <button class="menu-btn" id="btn-meta">
+                    <span class="btn-icon">✨</span> MEJORAS
                 </button>
                 <button class="menu-btn" id="btn-settings">
                     <span class="btn-icon">⚙</span> AJUSTES
@@ -46,7 +49,21 @@
             <div id="audio-unlock-hint" class="audio-hint">
                 🔊 Activar música: hacé <b>click</b> o presioná <b>una tecla</b>.
             </div>
-            <div class="version">v0.1.1 Early Access</div>
+            <div id="meta-essence" class="meta-essence-inline">Esencia: 0</div>
+            <div class="version">v0.1.2 Early Access</div>
+        </div>
+    </div>
+
+    <!-- Meta Upgrades Screen -->
+    <div id="meta-screen" class="screen">
+        <div class="menu-background"></div>
+        <div class="screen-header">
+            <h2>✨ MEJORAS PERMANENTES</h2>
+            <div id="meta-screen-essence" class="meta-essence">Esencia: 0</div>
+        </div>
+        <div id="meta-shop-list" class="meta-shop-list"></div>
+        <div class="screen-footer">
+            <button id="btn-meta-back" class="menu-btn small">VOLVER</button>
         </div>
     </div>
 
@@ -57,6 +74,28 @@
             <h2>📝 ACTUALIZACIONES</h2>
         </div>
         <div class="updates-list">
+            <div class="update-entry">
+                <h3>v0.1.2 - Early Access</h3>
+                <ul>
+                    <li>✨ [Meta] Nueva moneda permanente: <b>Esencia</b> (se guarda entre partidas).</li>
+                    <li>✨ [Meta] Esencia se gana al finalizar la run: <b>+1</b> cada 2 bosses derrotados, <b>+3</b> por cada NG+ completado.</li>
+                    <li>✨ [Meta] Nuevo menú <b>✨ MEJORAS</b> en el inicio para comprar upgrades permanentes con Esencia.</li>
+                    <li>🛒 [Mejoras] Slots de tienda escalables (arranca con menos) hasta <b>máx. 8</b>.</li>
+                    <li>🔁 [Mejoras] Rerolls de tienda escalables hasta <b>máx. 4</b>.</li>
+                    <li>🍀 [Mejoras] Suerte escalable hasta <b>máx. 20%</b> + nerfeo fuerte al spawn base de épicos/legendarios.</li>
+                    <li>💨 [Mejoras] Dash por cargas: hasta <b>3 dashes</b> seguidos (cargas regenerables).</li>
+                    <li>🛒 [Tienda] Añadidas <b>pociones de vida</b> y <b>maná</b> (uso instantáneo, <b>no ocupan slots</b>).</li>
+                    <li>♻️ [Tienda] Recicladora (máx. 1 uso) + 💱 Vendedor con precio visible (💰 +X oro por carta).</li>
+                    <li>🎁 [Cofres/Boss] Fixes de flujo (cancelar swap no rompe pantalla) + runas ya no se aplican gratis: <b>siempre ocupan slot</b> y se muestran.</li>
+                    <li>🎯 [Combate] Cap de velocidad de disparo: <b>máx +100%</b> (2x).</li>
+                    <li>🧪 [Balance] Toque del Vacío nerfeado: <b>8%→2%</b>, <b>máx 2 stacks</b> (descripción actualizada).</li>
+                    <li>🧪 [Balance] Nerfs: Aniquilación y Singularidad balanceadas. Vampírico rework: cura <b>5% vida máx</b> por kill (no lifesteal).</li>
+                    <li>🩹 [Bug] Arreglado el desfasaje de disparo (balas “se alejan”).</li>
+                    <li>🩹 [Bug] Enemigos/boss aparecían con vida baja: fix de escalado (al entrar: <b>HP = MaxHP</b>).</li>
+                    <li>🩹 [QoL] Clear de sala: al matar a todos, rellena <b>50% del maná</b>. Monedas imantadas más rápidas.</li>
+                    <li>🎨 [Menu] Logo 🔮 reemplazado por la <b>S</b> (mantiene animación) + favicon actualizado + fix de textos versión/esencia.</li>
+                </ul>
+            </div>
             <div class="update-entry">
                 <h3>v0.1.1 - Early Access</h3>
                 <ul>
@@ -450,6 +489,14 @@
                 <div class="stat-row">
                     <span>Tiempo de Run</span>
                     <span id="stat-time">00:00</span>
+                </div>
+                <div class="stat-row">
+                    <span>✨ Esencia Ganada</span>
+                    <span id="stat-essence-earned">0</span>
+                </div>
+                <div class="stat-row">
+                    <span>✨ Esencia Total</span>
+                    <span id="stat-essence-total">0</span>
                 </div>
                 <div class="stat-row highlight">
                     <span>Runa MVP</span>

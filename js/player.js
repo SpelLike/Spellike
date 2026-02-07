@@ -55,7 +55,10 @@ class Player extends Entity {
         this.dashDuration = 0.15;
         this.dashCooldown = 1.2;
         this.dashTimer = 0;
-        this.dashCooldownTimer = 0;
+        // Multi-charge dash (v0.1.2): starts at 1 charge, upgrade up to 3.
+        this.dashChargesMax = (window.Meta && typeof Meta.getDashCharges === 'function') ? Meta.getDashCharges() : 1;
+        this.dashCharges = this.dashChargesMax;
+        this.dashRechargeTimer = 0;
         this.isDashing = false;
         this.dashDirection = new Vector2();
 
@@ -110,7 +113,17 @@ class Player extends Entity {
     update(dt, room) {
         // Timers
         if (this.fireTimer > 0) this.fireTimer -= dt;
-        if (this.dashCooldownTimer > 0) this.dashCooldownTimer -= dt;
+        if (this._shootLockTimer && this._shootLockTimer > 0) this._shootLockTimer = Math.max(0, this._shootLockTimer - dt);
+        // Recharge dash charges
+        if (this.dashCharges < this.dashChargesMax) {
+            this.dashRechargeTimer += dt;
+            while (this.dashRechargeTimer >= this.dashCooldown && this.dashCharges < this.dashChargesMax) {
+                this.dashRechargeTimer -= this.dashCooldown;
+                this.dashCharges++;
+            }
+        } else {
+            this.dashRechargeTimer = 0;
+        }
         if (this.iFrameTimer > 0) this.iFrameTimer -= dt;
         if (this.slowTimer > 0) {
             this.slowTimer -= dt;
@@ -253,10 +266,16 @@ class Player extends Entity {
             if (!rune) continue;
             if (typeof rune.fireRateBonus === 'number') bonus += rune.fireRateBonus;
         }
+                // Cap fire rate bonus to +100% max (2x speed => half interval)
+        // In this system bonus is a fraction that reduces interval: 0.5 => 50% interval.
+        bonus = Math.max(0, Math.min(bonus, 0.5));
         interval *= (1 - bonus);
 
         // Temporary frenzy
         if (this.frenzyTimer > 0) interval *= (this.frenzyFireRateMult || 1);
+
+        // Never allow interval below 50% base (cap at +100% fire rate)
+        interval = Math.max(interval, this.fireRate * 0.5);
 
         // Clamp to keep it playable
         return Math.max(0.05, interval);
@@ -277,6 +296,12 @@ class Player extends Entity {
     handleInput(camera, canvasRect, scale) {
         // Get mouse world position for aiming
         const mouseWorld = Input.getMouseWorldPosition(scale, canvasRect);
+        // Convert from screen-space (canvas) to world-space by adding camera offset.
+        // Without this, aiming gets worse the further you move from the origin.
+        if (camera && typeof camera.x === 'number' && typeof camera.y === 'number') {
+            mouseWorld.x += camera.x;
+            mouseWorld.y += camera.y;
+        }
         this.aimAngle = Utils.angle(this.centerX, this.centerY, mouseWorld.x, mouseWorld.y);
 
         // Shoot when clicking
@@ -284,7 +309,8 @@ class Player extends Entity {
         const uiBlocked = (window.UI && typeof UI.shouldPreventShooting === 'function') ? UI.shouldPreventShooting() : false;
 
         const manaCost = this.getManaCost();
-        if (Input.isMouseDown(0) && this.fireTimer <= 0 && !this.isDashing && this.mana >= manaCost && !uiBlocked) {
+        const shootLocked = (this._shootLockTimer && this._shootLockTimer > 0);
+        if (Input.isMouseDown(0) && !shootLocked && this.fireTimer <= 0 && !this.isDashing && this.mana >= manaCost && !uiBlocked) {
             this.mana -= manaCost;
             this.shoot(mouseWorld);
         }
@@ -296,7 +322,7 @@ class Player extends Entity {
         this.brokenClock = false; // NG relic
         this.precisionLens = false; // NG relic
         this.eliteCrown = false; // NG relic
-        if (Input.isKeyJustPressed('Space') && this.dashCooldownTimer <= 0 && !this.isDashing) {
+        if (Input.isKeyJustPressed('Space') && this.dashCharges > 0 && !this.isDashing) {
             this.dash();
         }
 
@@ -421,6 +447,9 @@ class Player extends Entity {
             if (rune.radius) data.radius = Math.max(data.radius || 0, rune.radius);
             if (rune.percentDamage) data.percentDamage = (data.percentDamage || 0) + rune.percentDamage;
             if (rune.bossMultiplier) data.bossMultiplier = Math.max(data.bossMultiplier || 1, rune.bossMultiplier);
+
+        // Cap percent-damage runes (e.g., Toque del Vacío) to max 2 stacks (0.04)
+        if (data.percentDamage) data.percentDamage = Math.min(data.percentDamage, 0.04);
         }
         if ((this.chainCountBonus || 0) > 0) { data.chainCount = (data.chainCount || 0) + this.chainCountBonus; }
         if (this._scriptPierce) { data.pierceCount = (data.pierceCount || 0) + this._scriptPierce; }
@@ -438,7 +467,8 @@ class Player extends Entity {
 
         this.isDashing = true;
         this.dashTimer = this.dashDuration;
-        this.dashCooldownTimer = this.dashCooldown;
+        // Consume a charge; recharge handled in update()
+        this.dashCharges = Math.max(0, (this.dashCharges || 0) - 1);
         this.iFrameTimer = this.dashDuration + 0.1;
 
         // Tormenta Set Bonus (3 pieces): Dash shoots lightning backwards
@@ -601,9 +631,18 @@ class Player extends Entity {
                 break;
             }
             case 'heal': {
+                // Healing Totem: 20 HP, max 2 uses per room (resets on room entry).
+                this._healTotemUsesThisRoom = this._healTotemUsesThisRoom || 0;
+                if (this._healTotemUsesThisRoom >= 2) {
+                    try { if (window.UI && typeof UI.toastMessage === 'function') UI.toastMessage('🌿 Tótem agotado (siguiente sala)'); } catch (e) {}
+                    // IMPORTANT: no cooldown, no activation when out of uses.
+                    return;
+                }
+
                 const before = this.hp;
-                this.heal(40);
+                this.heal(20);
                 if (this.hp > before) {
+                    this._healTotemUsesThisRoom++;
                     ParticleSystem.burst(this.centerX, this.centerY, 14, { color: '#44ff88', life: 0.7, size: 4, speed: 2 });
                     AudioManager.play('pickup');
                 }

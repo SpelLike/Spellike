@@ -111,6 +111,8 @@
 .loot-options {
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
     gap: 20px;
     margin-bottom: 25px;
 }
@@ -652,13 +654,6 @@
     height: calc(100% - 115px);
     padding-right: 6px;
 }
-
-/* History panel: avoid double scrollbars (outer list + inner list)
-   The left column uses .history-list as the only scroll container. */
-#codex-panel-history .codex-list {
-    overflow: hidden;
-}
-
 
 .history-entry {
     border: 1px solid rgba(123, 77, 255, 0.25);

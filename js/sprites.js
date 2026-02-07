@@ -11,6 +11,12 @@ const Sprites = {
     _externalPlayerAnim: null,
     _chargerSkinLoaded: false,
     _chargerFrames: null,
+    _mageSkinLoaded: false,
+    _mageFrames: null,
+    _archerSkinLoaded: false,
+    _archerFrames: null,
+    _bruteSkinLoaded: false,
+    _bruteFrames: null,
 
 
     createCanvas(width, height) {
@@ -153,6 +159,76 @@ frames.walk[d] = walkFrames;
         }
     },
 
+    async _preloadEnemySkin(enemyType, frameSize = 40) {
+        const loadedFlag = `_${enemyType}SkinLoaded`;
+        const framesKey = `_${enemyType}Frames`;
+        if (this[loadedFlag]) return;
+        try {
+            const loadImg = (src) => new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('Failed to load ' + src));
+                img.src = src;
+            });
+
+            const base = `assets/enemies/${enemyType}`;
+            const dirs = ['up','down','left','right'];
+            const frames = { idle: {}, walk: {} };
+
+            for (const d of dirs) {
+                // idle
+                const idleImg = await loadImg(`${base}/idle_${d}.png`);
+                const { canvas: idleC, ctx: idleCtx } = this.createCanvas(frameSize, frameSize);
+                idleCtx.imageSmoothingEnabled = false;
+                const iw = idleImg.width, ih = idleImg.height;
+                const dx = Math.floor((frameSize - iw) / 2);
+                const dy = Math.floor((frameSize - ih) / 2);
+                idleCtx.clearRect(0, 0, frameSize, frameSize);
+                idleCtx.drawImage(idleImg, dx, dy);
+                frames.idle[d] = idleC;
+
+                // walk (try up to 4 frames)
+                const walkFrames = [];
+                for (let i = 0; i < 4; i++) {
+                    let imgW;
+                    try {
+                        imgW = await loadImg(`${base}/walk_${d}_${i}.png`);
+                    } catch (e) { break; }
+
+                    const { canvas: cw, ctx: xw } = this.createCanvas(frameSize, frameSize);
+                    xw.imageSmoothingEnabled = false;
+                    const sw = imgW.width, sh = imgW.height;
+                    const dxw = Math.floor((frameSize - sw) / 2);
+                    const dyw = Math.floor((frameSize - sh) / 2);
+                    xw.clearRect(0, 0, frameSize, frameSize);
+                    xw.drawImage(imgW, dxw, dyw);
+                    walkFrames.push(cw);
+                }
+                if (walkFrames.length === 1) walkFrames.push(walkFrames[0]);
+                frames.walk[d] = walkFrames.length ? walkFrames : [idleC, idleC];
+            }
+
+            this[framesKey] = frames;
+            this[loadedFlag] = true;
+        } catch (e) {
+            this[`_${enemyType}Frames`] = null;
+            this[`_${enemyType}SkinLoaded`] = false;
+        }
+    },
+
+    async preloadMageSkin() {
+        return this._preloadEnemySkin('mage', 40);
+    },
+
+    async preloadArcherSkin() {
+        return this._preloadEnemySkin('archer', 40);
+    },
+
+    async preloadBruteSkin() {
+        return this._preloadEnemySkin('brute', 40);
+    },
+
+
     _drawExternalIntoFrame(ctx, img, frame) {
         // Create a consistent 32x40 frame from a 64x64 input (nearest scaling)
         const bobOffset = frame === 1 || frame === 2 ? 1 : 0;
@@ -176,9 +252,13 @@ frames.walk[d] = walkFrames;
         // Draw sprite scaled down to 32x32
         // Use imageSmoothingEnabled=false for crisp pixels
         ctx.imageSmoothingEnabled = false;
-        const yOff = 6 + bobOffset; // place feet near bottom
-        // src is 64x64 (full frame). scale to 32x32.
-        ctx.drawImage(img, 0, 0, img.width || 64, img.height || 64, 0, yOff, 32, 32);
+        // Bigger render (still pixel-perfect)
+        const drawW = 38;
+        const drawH = 38;
+        const xOff = Math.floor((40 - drawW) / 2);
+        const yOff = (40 - drawH - 2) + bobOffset; // keep feet near bottom
+        // src is 64x64 (full frame). scale to drawW/drawH.
+        ctx.drawImage(img, 0, 0, img.width || 64, img.height || 64, xOff, yOff, drawW, drawH);
     },
 
     // =============================================
@@ -531,6 +611,73 @@ frames.walk[d] = walkFrames;
             this.cache[key] = sprites;
             return sprites;
         }
+
+        // External skin override for Mage
+        if (type === 'mage' && this._mageFrames) {
+            const key = `enemySprites_${type}`;
+            if (this.cache[key]) return this.cache[key];
+            const sprites = {
+                idle: {
+                    down: this._mageFrames.idle.down,
+                    up: this._mageFrames.idle.up,
+                    left: this._mageFrames.idle.left,
+                    right: this._mageFrames.idle.right
+                },
+                walk: {
+                    down: this._mageFrames.walk.down,
+                    up: this._mageFrames.walk.up,
+                    left: this._mageFrames.walk.left,
+                    right: this._mageFrames.walk.right
+                }
+            };
+            this.cache[key] = sprites;
+            return sprites;
+        }
+
+        // External skin override for Archer
+        if (type === 'archer' && this._archerFrames) {
+            const key = `enemySprites_${type}`;
+            if (this.cache[key]) return this.cache[key];
+            const sprites = {
+                idle: {
+                    down: this._archerFrames.idle.down,
+                    up: this._archerFrames.idle.up,
+                    left: this._archerFrames.idle.left,
+                    right: this._archerFrames.idle.right
+                },
+                walk: {
+                    down: this._archerFrames.walk.down,
+                    up: this._archerFrames.walk.up,
+                    left: this._archerFrames.walk.left,
+                    right: this._archerFrames.walk.right
+                }
+            };
+            this.cache[key] = sprites;
+            return sprites;
+        }
+
+        // External skin override for Brute (Tank)
+        if (type === 'brute' && this._bruteFrames) {
+            const key = `enemySprites_${type}`;
+            if (this.cache[key]) return this.cache[key];
+            const sprites = {
+                idle: {
+                    down: this._bruteFrames.idle.down,
+                    up: this._bruteFrames.idle.up,
+                    left: this._bruteFrames.idle.left,
+                    right: this._bruteFrames.idle.right
+                },
+                walk: {
+                    down: this._bruteFrames.walk.down,
+                    up: this._bruteFrames.walk.up,
+                    left: this._bruteFrames.walk.left,
+                    right: this._bruteFrames.walk.right
+                }
+            };
+            this.cache[key] = sprites;
+            return sprites;
+        }
+
 
         const key = `enemySprites_${type}`;
         if (this.cache[key]) return this.cache[key];

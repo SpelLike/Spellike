@@ -120,6 +120,16 @@
             // Ensure structure
             this.data.codex = this.data.codex || { enemies: {}, bosses: {} };
             this.data.ach = this.data.ach || { unlocked: {} };
+            // Meta currency + permanent upgrades (v0.1.2)
+            if (this.data.essence === undefined) this.data.essence = 0;
+            if (!this.data.upgrades) {
+                this.data.upgrades = {
+                    shop_slots: 1,   // lvl 1..5 => slots = 3 + lvl (4..8)
+                    shop_rerolls: 1, // lvl 1..4 => rerolls = lvl (1..4)
+                    luck: 1,         // lvl 1..4 => luckPct = lvl*5% (5..20)
+                    dash: 1          // lvl 1..3 => dashCharges = lvl (1..3)
+                };
+            }
             this.data.stats = this.data.stats || {
                 totalKills: 0,
                 totalBossKills: 0,
@@ -139,7 +149,90 @@
             if (s.bossKillsNormal === undefined) s.bossKillsNormal = 0;
             if (s.bossKillsHard === undefined) s.bossKillsHard = 0;
             if (s.bossKillsDemonic === undefined) s.bossKillsDemonic = 0;
+
+            // Backward-compatible defaults for upgrades
+            this.data.upgrades = this.data.upgrades || {};
+            const u = this.data.upgrades;
+            if (u.shop_slots === undefined) u.shop_slots = 1;
+            if (u.shop_rerolls === undefined) u.shop_rerolls = 1;
+            if (u.luck === undefined) u.luck = 1;
+            if (u.dash === undefined) u.dash = 1;
+            if (this.data.essence === undefined) this.data.essence = 0;
             this.save();
+        },
+
+        // -------- Essence + Upgrades --------
+        getEssence() {
+            return Math.max(0, Math.floor(this.data.essence || 0));
+        },
+
+        addEssence(amount) {
+            const n = Math.max(0, Math.floor(amount || 0));
+            if (!n) return;
+            this.data.essence = this.getEssence() + n;
+            this.save();
+        },
+
+        getUpgradeLevel(key) {
+            const u = this.data.upgrades || {};
+            return Math.max(1, Math.floor(u[key] || 1));
+        },
+
+        getUpgradeMax(key) {
+            if (key === 'shop_slots') return 5;
+            if (key === 'shop_rerolls') return 4;
+            if (key === 'luck') return 4;
+            if (key === 'dash') return 3;
+            return 1;
+        },
+
+        getUpgradeCost(key) {
+            const lvl = this.getUpgradeLevel(key);
+            // Increasing cost curve (tuned for small numbers)
+            if (key === 'shop_slots') return 3 + (lvl - 1) * 2;      // 3,5,7,9
+            if (key === 'shop_rerolls') return 4 + (lvl - 1) * 3;    // 4,7,10
+            if (key === 'luck') return 5 + (lvl - 1) * 4;           // 5,9,13
+            if (key === 'dash') return 6 + (lvl - 1) * 5;           // 6,11
+            return 999;
+        },
+
+        canBuyUpgrade(key) {
+            const lvl = this.getUpgradeLevel(key);
+            if (lvl >= this.getUpgradeMax(key)) return false;
+            return this.getEssence() >= this.getUpgradeCost(key);
+        },
+
+        buyUpgrade(key) {
+            const lvl = this.getUpgradeLevel(key);
+            const max = this.getUpgradeMax(key);
+            if (lvl >= max) return { ok: false, reason: 'max' };
+            const cost = this.getUpgradeCost(key);
+            if (this.getEssence() < cost) return { ok: false, reason: 'funds' };
+            this.data.essence = this.getEssence() - cost;
+            this.data.upgrades[key] = lvl + 1;
+            this.save();
+            return { ok: true, newLevel: lvl + 1 };
+        },
+
+        // Convenience getters (used by gameplay)
+        getShopSlots() {
+            const lvl = this.getUpgradeLevel('shop_slots');
+            return Math.min(8, 3 + lvl);
+        },
+
+        getShopRerolls() {
+            const lvl = this.getUpgradeLevel('shop_rerolls');
+            return Math.min(4, Math.max(1, lvl));
+        },
+
+        getLuckPct() {
+            const lvl = this.getUpgradeLevel('luck');
+            return Math.min(0.20, Math.max(0.05, lvl * 0.05));
+        },
+
+        getDashChargesMax() {
+            const lvl = this.getUpgradeLevel('dash');
+            return Math.min(3, Math.max(1, lvl));
         },
 
         load() {
@@ -219,6 +312,87 @@
             this.data.stats.totalGold = (this.data.stats.totalGold || 0) + n;
             this.checkAchievements();
             this.save();
+        },
+
+        // -------- Meta currency & permanent upgrades (v0.1.2) --------
+        getEssence() {
+            return Math.max(0, Math.floor(this.data.essence || 0));
+        },
+
+        addEssence(amount) {
+            const n = Math.max(0, Math.floor(amount || 0));
+            if (!n) return;
+            this.data.essence = this.getEssence() + n;
+            this.save();
+        },
+
+        getUpgradeLevel(key) {
+            const u = this.data.upgrades || {};
+            const v = u[key];
+            return (v === undefined || v === null) ? 1 : Math.max(1, Math.floor(v));
+        },
+
+        // Values derived from levels
+        getShopSlots() {
+            const lvl = Utils.clamp ? Utils.clamp(this.getUpgradeLevel('shop_slots'), 1, 5) : clamp(this.getUpgradeLevel('shop_slots'), 1, 5);
+            return 3 + lvl; // 4..8
+        },
+        getShopRerolls() {
+            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('shop_rerolls'), 1, 4) : clamp(this.getUpgradeLevel('shop_rerolls'), 1, 4));
+            return lvl; // 1..4
+        },
+        getLuckPct() {
+            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('luck'), 1, 4) : clamp(this.getUpgradeLevel('luck'), 1, 4));
+            return lvl * 0.05; // 0.05..0.20
+        },
+        getDashCharges() {
+            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('dash'), 1, 3) : clamp(this.getUpgradeLevel('dash'), 1, 3));
+            return lvl; // 1..3
+        },
+
+        // Pricing (increases per level)
+        getUpgradeMaxLevel(key) {
+            if (key === 'shop_slots') return 5;
+            if (key === 'shop_rerolls') return 4;
+            if (key === 'luck') return 4;
+            if (key === 'dash') return 3;
+            return 1;
+        },
+
+        getUpgradeCost(key) {
+            const lvl = this.getUpgradeLevel(key);
+            const next = lvl + 1;
+            // Base costs tuned so upgrades feel earned; costs rise per purchase.
+            const base = {
+                shop_slots: 4,
+                shop_rerolls: 3,
+                luck: 5,
+                dash: 6
+            };
+            const b = base[key] || 5;
+            // Cost curve: b * (next-1) with a small ramp
+            return Math.floor(b * (next - 1) * 1.2);
+        },
+
+        canBuyUpgrade(key) {
+            const lvl = this.getUpgradeLevel(key);
+            const max = this.getUpgradeMaxLevel(key);
+            if (lvl >= max) return false;
+            const cost = this.getUpgradeCost(key);
+            return this.getEssence() >= cost;
+        },
+
+        buyUpgrade(key) {
+            const lvl = this.getUpgradeLevel(key);
+            const max = this.getUpgradeMaxLevel(key);
+            if (lvl >= max) return false;
+            const cost = this.getUpgradeCost(key);
+            if (this.getEssence() < cost) return false;
+            this.data.essence = this.getEssence() - cost;
+            this.data.upgrades = this.data.upgrades || {};
+            this.data.upgrades[key] = lvl + 1;
+            this.save();
+            return true;
         },
 
         recordNgPlus(level) {

@@ -18,6 +18,7 @@ class Enemy extends Entity {
 
         this.maxHp = config.hp || 20;
         this.hp = this.maxHp;
+        this.spawnInvuln = 0.25; // prevent spawn-in damage from lingering effects
         this.damage = config.damage || 5;
         this.speed = config.speed || 60;
         this.baseSpeed = this.speed;
@@ -108,8 +109,72 @@ class Enemy extends Entity {
         this._stuckT = 0;
     }
 
+    // Predictive aiming (lead) to hit a moving player more intelligently.
+    // Returns an aim point in world space.
+    getPredictedAimPoint(projectileSpeed, {
+        leadStrength = 0.65,
+        maxLeadTime = 0.55,
+        aimError = 0,
+        errorPerDist = 0.01
+    } = {}) {
+        const t = this.target;
+        if (!t) return { x: this.centerX, y: this.centerY };
+
+        const tx = t.centerX ?? t.x;
+        const ty = t.centerY ?? t.y;
+        const vx = t.vx || 0;
+        const vy = t.vy || 0;
+
+        // If projectileSpeed is invalid, aim directly.
+        const s = Math.max(1, projectileSpeed || 0);
+
+        const rx = tx - this.centerX;
+        const ry = ty - this.centerY;
+        const a = (vx * vx + vy * vy) - s * s;
+        const b = 2 * (rx * vx + ry * vy);
+        const c = (rx * rx + ry * ry);
+
+        let time = 0;
+        if (Math.abs(a) < 1e-6) {
+            // Linear-ish
+            time = Math.abs(b) < 1e-6 ? 0 : (-c / b);
+        } else {
+            const disc = b * b - 4 * a * c;
+            if (disc > 0) {
+                const sd = Math.sqrt(disc);
+                const t1 = (-b - sd) / (2 * a);
+                const t2 = (-b + sd) / (2 * a);
+                time = Math.min(t1 > 0 ? t1 : Infinity, t2 > 0 ? t2 : Infinity);
+                if (!isFinite(time)) time = 0;
+            } else {
+                time = 0;
+            }
+        }
+
+        time = Utils.clamp(time, 0, maxLeadTime);
+
+        let px = tx + vx * time;
+        let py = ty + vy * time;
+
+        // Blend between direct aim and perfect lead (prevents aimbot feel)
+        px = tx + (px - tx) * leadStrength;
+        py = ty + (py - ty) * leadStrength;
+
+        // Add small, distance-scaled error so it stays fair
+        if (aimError > 0) {
+            const dist = Math.hypot(rx, ry);
+            const err = aimError + dist * errorPerDist;
+            px += (Math.random() * 2 - 1) * err;
+            py += (Math.random() * 2 - 1) * err;
+        }
+
+        return { x: px, y: py };
+    }
+
     update(dt, player, room) {
         if (!this.active) return;
+
+        if (this.spawnInvuln > 0) this.spawnInvuln = Math.max(0, this.spawnInvuln - dt);
 
         // Temporary enrage (from room modifier)
         if (this.enragedTimer && this.enragedTimer > 0) {
@@ -411,7 +476,16 @@ class Enemy extends Entity {
             if (dist < 260 && this.chargeCooldownTimer <= 0) {
                 this.state = 'windup';
                 this.stateTimer = 0.55;
-                this.chargeAngle = angle;
+                // Predict where the player will be shortly (smarter dash, still fair)
+                const leadT = 0.25;
+                const tx = this.target.centerX ?? this.target.x;
+                const ty = this.target.centerY ?? this.target.y;
+                const px = tx + (this.target.vx || 0) * leadT;
+                const py = ty + (this.target.vy || 0) * leadT;
+                // Blend with direct aim so it doesn't feel like an aimbot dash
+                const bx = tx + (px - tx) * 0.7;
+                const by = ty + (py - ty) * 0.7;
+                this.chargeAngle = Math.atan2(by - this.centerY, bx - this.centerX);
                 this.vx = 0;
                 this.vy = 0;
             }
@@ -519,7 +593,9 @@ class Enemy extends Entity {
         if (!this.target) return;
         this.attackTimer = this.attackCooldown;
 
-        const baseAngle = this.angleTo(this.target);
+        // Predict player movement (smarter shots)
+        const aim = this.getPredictedAimPoint(300, { leadStrength: 0.8, maxLeadTime: 0.55, aimError: 5 });
+        const baseAngle = Math.atan2(aim.y - this.centerY, aim.x - this.centerX);
         const spread = Math.PI / 8;
 
         // Shoot multiple projectiles
@@ -527,9 +603,11 @@ class Enemy extends Entity {
             const offset = (i - (this.projectileCount - 1) / 2) * spread;
             const angle = baseAngle + offset;
 
+            const muzzle = this._getStaffMuzzle(angle);
+
             Game.spawnProjectile(
-                this.centerX,
-                this.centerY,
+                muzzle.x,
+                muzzle.y,
                 angle,
                 this.damage,
                 300,
@@ -611,14 +689,34 @@ class Enemy extends Entity {
         this.currentSummons++;
     }
 
+    _getStaffMuzzle(angle) {
+        // Spawn point for projectiles so they appear to come from the staff/weapon.
+        // We bias slightly to the enemy's left side relative to the firing direction.
+        const forward = 14;
+        const side = 10;
+        const fx = Math.cos(angle) * forward;
+        const fy = Math.sin(angle) * forward;
+        const sx = -Math.sin(angle) * side;
+        const sy = Math.cos(angle) * side;
+
+        // Base from center, then forward + side offset
+        return {
+            x: this.centerX + fx + sx,
+            y: this.centerY + fy + sy
+        };
+    }
+
     shootAtPlayer() {
         if (!this.target) return;
         this.attackTimer = this.attackCooldown;
 
-        const angle = this.angleTo(this.target);
+        // Predict player movement (smarter shots)
+        const aim = this.getPredictedAimPoint(250, { leadStrength: 0.7, maxLeadTime: 0.55, aimError: 4 });
+        const angle = Math.atan2(aim.y - this.centerY, aim.x - this.centerX);
+        const muzzle = this._getStaffMuzzle(angle);
         Game.spawnProjectile(
-            this.centerX,
-            this.centerY,
+            muzzle.x,
+            muzzle.y,
             angle,
             this.damage,
             250,
@@ -790,7 +888,8 @@ behaviorRole(dt, speed, room) {
                 steerAwayFrom(player.centerX, player.centerY, speed * 1.25);
                 // shoot while kiting
                 if (this.attackTimer <= 0) {
-                    const a = this.angleTo(player);
+                    const aim = this.getPredictedAimPoint(260, { leadStrength: 0.75, maxLeadTime: 0.55, aimError: 4 });
+                    const a = Math.atan2(aim.y - this.centerY, aim.x - this.centerX);
                     Game.spawnProjectile(this.centerX, this.centerY, a, Math.max(8, Math.floor(this.damage * 1.25)), 260, 650, 'enemy', ['sniper'], {});
                     this.attackTimer = 1.6;
                     AudioManager.play('shoot');
@@ -800,7 +899,8 @@ behaviorRole(dt, speed, room) {
                 const dToBest = Utils.distance(this.centerX, this.centerY, best.x, best.y);
                 if (dToBest > 20) steerTo(best.x, best.y, speed * 0.95);
                 if (this.attackTimer <= 0) {
-                    const a = this.angleTo(player);
+                    const aim = this.getPredictedAimPoint(270, { leadStrength: 0.78, maxLeadTime: 0.55, aimError: 4 });
+                    const a = Math.atan2(aim.y - this.centerY, aim.x - this.centerX);
                     Game.spawnProjectile(this.centerX, this.centerY, a, Math.max(10, Math.floor(this.damage * 1.35)), 270, 720, 'enemy', ['arrow'], {});
                     this.attackTimer = 2.0;
                     AudioManager.play('shoot');
@@ -837,7 +937,8 @@ behaviorRole(dt, speed, room) {
 
             // Occasional shove shot (knockback) toward hazards
             if (this.attackTimer <= 0 && distToPlayer < 280) {
-                const a = this.angleTo(player);
+                const aim = this.getPredictedAimPoint(210, { leadStrength: 0.68, maxLeadTime: 0.5, aimError: 5 });
+                const a = Math.atan2(aim.y - this.centerY, aim.x - this.centerX);
                 Game.spawnProjectile(this.centerX, this.centerY, a, Math.max(4, Math.floor(this.damage * 0.6)), 210, 520, 'enemy', ['push'], { knockback: 180 });
                 this.attackTimer = 2.4;
                 AudioManager.play('shoot');
@@ -872,7 +973,8 @@ behaviorRole(dt, speed, room) {
 
             // Light poke shot
             if (this.attackTimer <= 0 && distToPlayer < 360) {
-                const a = this.angleTo(player);
+                const aim = this.getPredictedAimPoint(220, { leadStrength: 0.65, maxLeadTime: 0.5, aimError: 5 });
+                const a = Math.atan2(aim.y - this.centerY, aim.x - this.centerX);
                 Game.spawnProjectile(this.centerX, this.centerY, a, Math.max(3, Math.floor(this.damage * 0.55)), 220, 520, 'enemy', ['orb'], {});
                 this.attackTimer = 2.7;
             }
@@ -909,6 +1011,7 @@ behaviorRole(dt, speed, room) {
     }
 
     takeDamage(amount, knockbackAngle = 0, knockbackForce = 0) {
+        if (this.spawnInvuln > 0) return false;
         let amt = amount;
         // Marked target takes increased damage (Hunter Mark relic)
         if (this.markedTimer > 0 && this.markedDamageMult && this.markedDamageMult !== 1) {
@@ -1156,7 +1259,7 @@ const EnemyTypes = {
     ,
     // Extra enemies (for new biomes / variety)
     stalker: { hp: 22, damage: 9, speed: 120, behavior: 'chase', attackRange: 28, attackCooldown: 0.9, xp: 14 },
-    brute: { hp: 80, damage: 16, speed: 45, behavior: 'chase', attackRange: 40, attackCooldown: 1.4, xp: 28, width: 44, height: 44 },
+    brute: { hp: 80, damage: 16, speed: 45, behavior: 'chase', attackRange: 40, attackCooldown: 1.4, xp: 28, width: 34, height: 34 },
     wisp: { hp: 18, damage: 11, speed: 70, behavior: 'ranged', attackCooldown: 1.6, xp: 16 },
     turret: { hp: 55, damage: 14, speed: 0, behavior: 'ranged', attackCooldown: 1.2, xp: 22, width: 36, height: 36 }
 

@@ -42,6 +42,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
                 if (typeof Sprites.preloadChargerSkin === 'function') {
                     await Sprites.preloadChargerSkin();
+
+                    if (typeof Sprites.preloadMageSkin === 'function') {
+                        await Sprites.preloadMageSkin();
+                    }
+                    if (typeof Sprites.preloadArcherSkin === 'function') {
+                        await Sprites.preloadArcherSkin();
+                    }
+
+                    // Tank (Brute) external skin
+                    if (typeof Sprites.preloadBruteSkin === 'function') {
+                        await Sprites.preloadBruteSkin();
+                    }
                 }
 }
         } catch (e) {

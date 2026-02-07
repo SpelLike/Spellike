@@ -27,7 +27,7 @@ const RuneDatabase = {
         { id: 'power_surge', name: 'Descarga de Poder', icon: '💥', desc: '+8 daño base', damageBonus: 8 },
         { id: 'triple_cast', name: 'Triple Lanzamiento', icon: '🌟', desc: 'Dispara 2 proyectiles adicionales', extraProjectiles: 2 },
         { id: 'piercing', name: 'Perforación', icon: '🎯', desc: 'Proyectiles atraviesan 2 enemigos', effect: 'pierce', pierceCount: 2 },
-        { id: 'vampiric', name: 'Vampírico', icon: '🩸', desc: 'Cura 5% del daño infligido', lifeSteal: 0.05 },
+        { id: 'vampiric', name: 'Vampírico', icon: '🩸', desc: 'Cura 5% de tu vida máxima al matar un enemigo', onKillHealPct: 0.05 },
         { id: 'chain', name: 'Cadena', icon: '⛓️', desc: 'Proyectiles saltan a 2 enemigos cercanos', effect: 'chain', chainCount: 2 },
         { id: 'explosion', name: 'Explosión', icon: '💣', desc: 'Proyectiles explotan al impactar', effect: 'explode', radius: 50 },
         { id: 'mana_flow', name: 'Flujo de Maná', icon: '🌊', desc: '+50% regeneración de maná', manaRegen: 0.5 },
@@ -59,13 +59,13 @@ const RuneDatabase = {
     ],
 
     legendary: [
-        { id: 'annihilation', name: 'Aniquilación', icon: '☄️', desc: '+30 daño, +2 proyectiles, explosión', damageBonus: 30, extraProjectiles: 2, effect: 'explode', radius: 90 },
-        { id: 'void_touch', name: 'Toque del Vacío', icon: '🌑', desc: 'Quita 8% de HP máxima del enemigo por hit', percentDamage: 0.08 },
+        { id: 'annihilation', name: 'Aniquilación', icon: '☄️', desc: '+15 daño, +1 proyectil, explosión', damageBonus: 15, extraProjectiles: 1, effect: 'explode', radius: 75 },
+        { id: 'void_touch', name: 'Toque del Vacío', icon: '🌑', desc: 'Quita 2% de HP máxima del enemigo por hit (máx 2 stacks)', percentDamage: 0.02 },
         { id: 'infinity', name: 'Infinito', icon: '♾️', desc: 'Proyectiles sin límite de rango', rangeMultiplier: 999 },
         { id: 'godslayer', name: 'Matadios', icon: '👁️', desc: 'Daño x4 contra jefes', bossMultiplier: 4 },
         { id: 'time_warp', name: 'Distorsión Temporal', icon: '⏱️', desc: 'Al matar, disparás 3x más rápido por 5s', effect: 'frenzy' },
 
-        { id: 'singularity', name: 'Singularidad', icon: '🕳️', desc: '+3 proyectiles, +25% daño', extraProjectiles: 3, damageMultiplier: 1.25 },
+        { id: 'singularity', name: 'Singularidad', icon: '🕳️', desc: '+2 proyectiles, +15% daño', extraProjectiles: 2, damageMultiplier: 1.15 },
         { id: 'executioner', name: 'Verdugo', icon: '🪓', desc: '+15 daño y 35% crit x3', damageBonus: 15, effect: 'crit', critChance: 0.35, critDamage: 3 },
         { id: 'archmage', name: 'Archimago', icon: '🧙', desc: '+8 maná, +60% regen, +20% fire rate', manaBonus: 8, manaRegen: 0.6, fireRateBonus: 0.2 }
     ]
@@ -97,11 +97,27 @@ function getRandomRune(rarity) {
     if (!runes || runes.length === 0) return null;
     const rune = { ...Utils.randomChoice(runes) };
     rune.rarity = rarity;
+    rune.type = 'rune';
     return rune;
 }
 
 function getWeightedRandomRune(preferredRarity = null) {
-    const weights = { common: 55, rare: 30, epic: 12, legendary: 3 };
+    // Base rarity weights (v0.1.2): épicos/legendarios MUCHO más raros.
+    const weights = { common: 70, rare: 26, epic: 3.5, legendary: 0.5 };
+
+    // Luck (permanent): up to +20% effective boost towards high rarity.
+    let luck = 0;
+    if (window.Meta && typeof Meta.getLuckPct === 'function') {
+        luck = Meta.getLuckPct(); // 0.05..0.20
+    }
+    // Convert luck into a smooth multiplier for epic/legendary odds.
+    if (luck > 0) {
+        const mult = 1 + luck * 2.5; // 1.125..1.5
+        weights.epic *= mult;
+        weights.legendary *= mult;
+        // Keep total somewhat stable by shaving a bit off common
+        weights.common = Math.max(10, weights.common - (luck * 30));
+    }
 
     if (preferredRarity && weights[preferredRarity]) {
         weights[preferredRarity] *= 2;

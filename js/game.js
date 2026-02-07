@@ -34,6 +34,10 @@ const Game = {
     // Run progression: increases after each boss kill (scales later rooms)
     bossKillsThisRun: 0,
 
+    // Meta-points tracking for permanent upgrades (v0.1.2)
+    bossKillsTotalRun: 0,
+    ngTransitionsThisRun: 0,
+
     // Global run modifiers (blessings/curses/mutations)
     modifiers: {
         playerDamageMult: 1,
@@ -110,6 +114,8 @@ const Game = {
         this.playTime = 0;
         this.ngPlusLevel = 0;
         this.bossKillsThisRun = 0;
+        this.bossKillsTotalRun = 0;
+        this.ngTransitionsThisRun = 0;
         this.modifiers = { playerDamageMult: 1, enemyCountMult: 1, enemyStatMult: 1, enemyProjectileSpeedMult: 1, enemyExplodeOnDeath: false };
         this.blessings = [];
         this.curses = [];
@@ -286,10 +292,42 @@ const Game = {
     onEnterRoom(room) {
         if (!room) return;
 
+        // Prevent carry-over projectiles from previous rooms from instantly
+        // damaging newly spawned enemies/bosses.
+        try { if (window.ProjectileManager && typeof ProjectileManager.clear === 'function') ProjectileManager.clear(); } catch (e) { }
+
         // Safety: Invincibility on room entry to prevent unfair hits
         if (this.player) {
             this.player.iFrameTimer = 1.5;
+
+            // Prevent accidental "auto-fire" carry-over into a fresh room.
+            // Some browsers keep mouseDown true across focus changes / room transitions.
+            this.player._shootLockTimer = Math.max(this.player._shootLockTimer || 0, 0.25);
+            this.player.fireTimer = Math.max(this.player.fireTimer || 0, 0.10);
+
+            // Reset per-room counters
+            this.player._healTotemUsesThisRoom = 0;
         }
+
+        // Give newly-entered rooms a short grace period where enemies/bosses
+        // cannot be damaged (prevents "spawned already hurt" from passives/events).
+        try {
+            if (room && Array.isArray(room.enemies)) {
+                for (const e of room.enemies) {
+                    if (!e || !e.active) continue;
+                    e.spawnInvuln = Math.max(e.spawnInvuln || 0, (e.isBoss || e.bossType) ? 0.8 : 0.6);
+                    // Also hard-reset HP once on entry to kill any lingering tick damage
+                    if (typeof e.maxHp === 'number') e.hp = e.maxHp;
+                }
+            }
+        } catch (e) { }
+
+        // If this room was already cleared, never re-activate enemies when backtracking.
+        try {
+            if (room._clearedOnce && Array.isArray(room.enemies)) {
+                room.enemies.forEach(e => { if (e) e.active = false; });
+            }
+        } catch (e) { }
 
         // Navigation flags (backtracking/minimap)
         try {
@@ -586,7 +624,9 @@ const Game = {
 
     shouldSpawnForgeTerminal(biomeId) {
         if (!this.isDemencial()) return false;
-        const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
+        const baseIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
+        const loops = Math.max(0, this.ngPlusLevel || 0);
+        const biomeIdx = baseIdx + (window.BiomeOrder ? BiomeOrder.length * loops : 0);
 
         // Base chance per biome
         const base = 0.30 + biomeIdx * 0.04; // 30% -> ~74% late
@@ -609,7 +649,9 @@ const Game = {
 
     spawnForgeTerminalInRoom(room, biomeId) {
         if (!room || !this.isDemencial()) return;
-        const biomeIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
+        const baseIdx = (window.BiomeOrder) ? Math.max(0, BiomeOrder.indexOf(biomeId)) : 0;
+        const loops = Math.max(0, this.ngPlusLevel || 0);
+        const biomeIdx = baseIdx + (window.BiomeOrder ? BiomeOrder.length * loops : 0);
         const cost = 250 + biomeIdx * 80 + (this.ngPlusLevel || 0) * 40;
 
         const ev = {
@@ -667,6 +709,25 @@ const Game = {
                 RuneScript.trigger('OnKill', { eventName: 'OnKill', player: this.player, room, target: enemy, damage: enemy.maxHp || 0 });
             }
         } catch (e) { }
+
+        // Rune: Vampírico (heal % max HP per kill) - only if player got the last hit
+        try {
+            if (this.player && enemy && enemy._lastHitOwner === 'player') {
+                let healPct = 0;
+                for (const r of (this.player.runes || [])) {
+                    if (r && r.id === 'vampiric' && typeof r.onKillHealPct === 'number') {
+                        healPct = Math.max(healPct, r.onKillHealPct);
+                    }
+                }
+                if (healPct > 0) {
+                    const heal = Math.max(1, Math.floor((this.player.maxHp || 0) * healPct));
+                    this.player.hp = Math.min(this.player.maxHp, (this.player.hp || 0) + heal);
+                    if (window.UI && typeof UI.toast === 'function') {
+                        UI.toast(`🩸 +${heal} HP`, 900);
+                    }
+                }
+            }
+        } catch (e) { }
         // Base gold
         room.spawnGold(enemy.centerX, enemy.centerY, enemy.goldValue);
 
@@ -699,6 +760,7 @@ const Game = {
     onBossKilled(boss) {
         // Run progression: each boss kill makes future rooms harder
         this.bossKillsThisRun = (this.bossKillsThisRun || 0) + 1;
+        this.bossKillsTotalRun = (this.bossKillsTotalRun || 0) + 1;
 
         this.player.stats.kills++;
         this.player.stats.damageDealt += boss.maxHp;
@@ -723,6 +785,26 @@ const Game = {
                 RuneScript.trigger('OnKill', { eventName: 'OnKill', player: this.player, room, target: boss, damage: boss.maxHp || 0 });
             }
         } catch (e) { }
+
+        // Rune: Vampírico (heal % max HP per kill) - bosses count too
+        try {
+            if (this.player && boss && boss._lastHitOwner === 'player') {
+                let healPct = 0;
+                for (const r of (this.player.runes || [])) {
+                    if (r && r.id === 'vampiric' && typeof r.onKillHealPct === 'number') {
+                        healPct = Math.max(healPct, r.onKillHealPct);
+                    }
+                }
+                if (healPct > 0) {
+                    const heal = Math.max(1, Math.floor((this.player.maxHp || 0) * healPct));
+                    this.player.hp = Math.min(this.player.maxHp, (this.player.hp || 0) + heal);
+                    if (window.UI && typeof UI.toast === 'function') {
+                        UI.toast(`🩸 +${heal} HP`, 900);
+                    }
+                }
+            }
+        } catch (e) { }
+
         room.bossDefeated = true;
 
         // Spawn lots of gold
@@ -882,7 +964,7 @@ const Game = {
 
         // Check if this is a RUNE (has rune-specific properties like effect)
         // Runes have 'effect' property for combat effects (burn, pierce, chain, etc)
-        const isRune = item.effect !== undefined ||
+        const isRune = item.type === 'rune' || item.effect !== undefined ||
             item.extraProjectiles !== undefined ||
             item.manaBonus !== undefined ||
             item.fireRateBonus !== undefined ||
@@ -937,6 +1019,17 @@ const Game = {
                 color: '#44ff88', life: 0.5, size: 3, speed: 2
             });
             appliedSomething = true;
+        }
+
+        // Mana restore (e.g., mana potion)
+        if (item.manaRestore && item.manaRestore > 0) {
+            try {
+                this.player.mana = Math.min(this.player.maxMana, this.player.mana + item.manaRestore);
+                ParticleSystem.burst(this.player.centerX, this.player.centerY, 10, {
+                    color: '#4fc3f7', life: 0.5, size: 3, speed: 2
+                });
+                appliedSomething = true;
+            } catch (e) { }
         }
 
         // Potions
@@ -1091,7 +1184,7 @@ const Game = {
         }
 
         // Rewards are usually runes. If all rune slots are full, let the player choose which one to replace.
-        const isRune = reward.effect !== undefined ||
+        const isRune = reward.type === 'rune' || reward.effect !== undefined ||
             reward.extraProjectiles !== undefined ||
             reward.manaBonus !== undefined ||
             reward.fireRateBonus !== undefined ||
@@ -1105,7 +1198,7 @@ const Game = {
             reward.bossMultiplier !== undefined;
 
         if (isRune) {
-            UI.handleRuneChoice({ ...reward });
+            UI.handleRuneChoice({ ...reward }, 'boss');
             // UI.closeLootModal() will unpause; if it doesn't open a modal (empty slot), it still unpauses.
             return;
         }
@@ -1218,6 +1311,7 @@ const Game = {
     // NEW: Start New Game+ loop
     startNewGamePlus() {
         this.ngPlusLevel++;
+        this.ngTransitionsThisRun = (this.ngTransitionsThisRun || 0) + 1;
         this.bossKillsThisRun = 0;
 
         try {
@@ -1354,6 +1448,21 @@ const Game = {
                 }
                 if (typeof Meta.recordDeath === 'function') {
                     Meta.recordDeath();
+                }
+
+                // Permanent currency: "Esencia" (v0.1.2)
+                // Fórmula: +1 por cada 2 bosses (acumulado en la run) +3 por cada salto a NG+
+                if (typeof Meta.addEssence === 'function') {
+                    const bosses = Math.max(0, Math.floor(this.bossKillsTotalRun || 0));
+                    const ng = Math.max(0, Math.floor(this.ngTransitionsThisRun || 0));
+                    const earned = Math.floor(bosses / 2) + (ng * 3);
+                    if (earned > 0) {
+                        Meta.addEssence(earned);
+                        // Store for UI (death screen)
+                        this._lastEssenceEarned = earned;
+                    } else {
+                        this._lastEssenceEarned = 0;
+                    }
                 }
             }
         } catch (e) { }
