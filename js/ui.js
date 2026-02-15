@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // ARCANE DEPTHS - UI Manager (MAJOR UPDATE)
 // ==========================================
 
@@ -15,6 +15,8 @@ const UI = {
     _hudActiveSlots: 0,
     codexOpen: false,
     codexReturn: 'game',
+    synergyPanelVisible: false,
+    synergyAlwaysVisible: false,
 
     init() {
         this.screens = {
@@ -47,6 +49,21 @@ const UI = {
             if (this.lootModal) { this.closeLootModal(); return; }
             // Settings screen is navigated via buttons; do not force-close other screens here.
         });
+
+        // Load synergy setting
+        const savedSynergy = localStorage.getItem('synergyAlwaysVisible');
+        if (savedSynergy !== null) {
+            this.synergyAlwaysVisible = savedSynergy === 'true';
+        }
+        
+        // Synergy panel toggle (tecla B)
+        if (window.Input && typeof Input.onKeyPress === 'function') {
+            Input.onKeyPress('KeyB', () => {
+                if (Game.running && !Game.paused) {
+                    this.synergyPanelVisible = !this.synergyPanelVisible;
+                }
+            });
+        }
 
         this.hideLoading();
     },
@@ -206,14 +223,29 @@ const UI = {
         if (screenId === 'meta-screen') {
             if (typeof this.renderMetaShop === 'function') this.renderMetaShop();
         }
+        if (screenId === 'updates-screen') {
+            if (typeof this.renderUpdates === 'function') this.renderUpdates();
+        }
     },
+
+    renderUpdates() {
+        try {
+            const notes013 = document.getElementById('updates-notes-013');
+            const notes012 = document.getElementById('updates-notes-012');
+            const notes011 = document.getElementById('updates-notes-011');
+            if (notes013) notes013.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes013') : '';
+            if (notes012) notes012.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes012') : '';
+            if (notes011) notes011.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes011') : '';
+        } catch (e) { }
+    },
+
 
     updateMetaEssenceUI() {
         const val = (window.Meta && typeof Meta.getEssence === 'function') ? Meta.getEssence() : 0;
         const small = document.getElementById('meta-essence');
-        if (small) small.textContent = `Esencia: ${val}`;
+        if (small) small.textContent = (window.i18n ? i18n.f('metaEssenceLabel',{n:val}) : `Essence: ${val}`);
         const big = document.getElementById('meta-screen-essence');
-        if (big) big.textContent = `Esencia: ${val}`;
+        if (big) big.textContent = (window.i18n ? i18n.f('metaEssenceLabel',{n:val}) : `Essence: ${val}`);
     },
 
     renderMetaShop() {
@@ -223,26 +255,26 @@ const UI = {
         const defs = [
             {
                 key: 'shop_slots',
-                title: 'Más slots en tienda',
-                desc: 'Reduce la tienda a 4 y desbloquea hasta 8 slots.',
+                title: i18n.t('metaShopSlotsTitle'),
+                desc: i18n.t('metaShopSlotsDesc'),
                 value: () => {
                     const slots = (window.Meta && Meta.getShopSlots) ? Meta.getShopSlots() : 4;
-                    return `${slots}/8 slots`;
+                    return `${slots}/8 ${i18n.currentLang==='es'?'slots':'slots'}`;
                 }
             },
             {
                 key: 'shop_rerolls',
-                title: 'Rerolls de tienda',
-                desc: 'Más rerolls por tienda (máx 4).',
+                title: i18n.t('metaShopRerollsTitle'),
+                desc: i18n.t('metaShopRerollsDesc'),
                 value: () => {
                     const rr = (window.Meta && Meta.getShopRerolls) ? Meta.getShopRerolls() : 1;
-                    return `${rr}/4 rerolls`;
+                    return `${rr}/4 ${i18n.currentLang==='es'?'rerolls':'rerolls'}`;
                 }
             },
             {
                 key: 'luck',
-                title: 'Suerte',
-                desc: 'Aumenta chances de items/runes mejores (máx 20%).',
+                title: i18n.t('metaShopLuckTitle'),
+                desc: i18n.t('metaShopLuckDesc'),
                 value: () => {
                     const pct = (window.Meta && Meta.getLuckPct) ? Meta.getLuckPct() : 0.05;
                     return `${Math.round(pct*100)}%/20%`;
@@ -250,11 +282,38 @@ const UI = {
             },
             {
                 key: 'dash',
-                title: 'Dash extra',
-                desc: 'Hasta 3 dashes en cadena. Se recargan con el tiempo.',
+                title: i18n.t('metaShopDashTitle'),
+                desc: i18n.t('metaShopDashDesc'),
                 value: () => {
                     const d = (window.Meta && Meta.getDashCharges) ? Meta.getDashCharges() : 1;
-                    return `${d}/3 cargas`;
+                    return `${d}/3 ${i18n.currentLang==='es'?'cargas':'charges'}`;
+                }
+            },
+            {
+                key: 'start_gold',
+                title: i18n.t('metaShopStartGoldTitle'),
+                desc: i18n.t('metaShopStartGoldDesc'),
+                value: () => {
+                    const g = (window.Meta && Meta.getStartGold) ? Meta.getStartGold() : 0;
+                    return `+${g} ${i18n.currentLang==='es'?'oro':'gold'}`;
+                }
+            },
+            {
+                key: 'vitality',
+                title: i18n.t('metaShopVitalityTitle'),
+                desc: i18n.t('metaShopVitalityDesc'),
+                value: () => {
+                    const hp = (window.Meta && Meta.getMaxHpBonus) ? Meta.getMaxHpBonus() : 0;
+                    return `+${hp} HP`;
+                }
+            },
+            {
+                key: 'potion_belt',
+                title: i18n.t('metaShopPotionBeltTitle'),
+                desc: i18n.t('metaShopPotionBeltDesc'),
+                value: () => {
+                    const p = (window.Meta && Meta.getStartPotions) ? Meta.getStartPotions() : 0;
+                    return `+${p} ${i18n.currentLang==='es'?'pociones':'potions'}`;
                 }
             }
         ];
@@ -284,7 +343,7 @@ const UI = {
             right.className = 'meta-upgrade-right';
             const level = document.createElement('div');
             level.className = 'meta-upgrade-level';
-            level.textContent = `Nivel ${lvl}/${max} • ${d.value()}`;
+            level.textContent = `Nivel ${lvl}/${max} - ${d.value()}`;
 
             const btn = document.createElement('button');
             btn.className = 'meta-buy-btn';
@@ -349,7 +408,7 @@ const UI = {
                 hardCard.classList.add('locked');
                 if (ov) {
                     ov.style.display = 'block';
-                    ov.textContent = '🔒 Derrota 1 jefe en Normal';
+            ov.textContent = `🔒 ${i18n.t('unlockBossNormal')}`;
                 }
             }
         }
@@ -363,7 +422,7 @@ const UI = {
                 demonicCard.classList.add('locked');
                 if (ov) {
                     ov.style.display = 'block';
-                    ov.textContent = '🔒 Derrota 1 jefe en Difícil';
+            ov.textContent = `🔒 ${i18n.t('unlockBossHard')}`;
                 }
             }
         }
@@ -411,8 +470,42 @@ const UI = {
 
         document.getElementById('btn-quit').onclick = () => {
             AudioManager.play('menuClick');
-            if (confirm('¿Salir del juego?')) window.close();
+            if (confirm('Â¿Salir del juego?')) window.close();
         };
+
+        // Seed input handlers
+        const btnRandomSeed = document.getElementById('btn-random-seed');
+        const btnClearSeed = document.getElementById('btn-clear-seed');
+        const btnCopySeed = document.getElementById('btn-copy-seed');
+        const seedInput = document.getElementById('seed-input');
+        
+        if (btnRandomSeed) {
+            btnRandomSeed.addEventListener('click', () => {
+                const seed = Game.generateRandomSeed();
+                if (seedInput) seedInput.value = seed;
+                this.showToast('🎲 Seed generada: ' + seed);
+                AudioManager.play('menuClick');
+            });
+        }
+        
+        if (btnClearSeed) {
+            btnClearSeed.addEventListener('click', () => {
+                if (seedInput) seedInput.value = '';
+                this.showToast('✖ Seed limpiada');
+                AudioManager.play('menuClick');
+            });
+        }
+        
+        if (btnCopySeed) {
+            btnCopySeed.addEventListener('click', () => {
+                if (seedInput && seedInput.value) {
+                    navigator.clipboard.writeText(seedInput.value).then(() => {
+                        this.showToast('📋 Seed copiada: ' + seedInput.value);
+                    });
+                    AudioManager.play('menuClick');
+                }
+            });
+        }
 
         document.querySelectorAll('.menu-btn').forEach(btn => {
             btn.onmouseenter = () => AudioManager.play('menuHover');
@@ -442,6 +535,19 @@ const UI = {
         const toast = document.getElementById('feedback-toast');
         const typeSel = document.getElementById('feedback-type');
         const textarea = document.getElementById('feedback-text');
+        const FB_COOLDOWN_MS = 120000; // 2 minutes
+        const FB_LAST_SENT_KEY = 'spellikedev_feedback_lastSent';
+
+        const getFbRemainingMs = () => {
+            const last = parseInt(localStorage.getItem(FB_LAST_SENT_KEY) || '0', 10);
+            if (!last) return 0;
+            const elapsed = Date.now() - last;
+            return Math.max(0, FB_COOLDOWN_MS - elapsed);
+        };
+
+        const markFbSentNow = () => {
+            localStorage.setItem(FB_LAST_SENT_KEY, String(Date.now()));
+        };
 
         const showToast = (msg) => {
             if (!toast) return;
@@ -519,11 +625,18 @@ ${template}
         if (sendBtn) {
             sendBtn.onclick = async () => {
                 AudioManager.play('menuClick');
+
+                const remainingMs = getFbRemainingMs();
+                if (remainingMs > 0) {
+                    const s = Math.ceil(remainingMs / 1000);
+                    showToast(i18n.t('feedbackCooldown').replace('{s}', s));
+                    return;
+                }
                 const payload = buildPayload();
                 const subject = buildSubject();
                 const to = 'spellikedev@gmail.com';
 
-                // ✅ Best UX: send directly without requiring the player to sign into an email client.
+                // âœ… Best UX: send directly without requiring the player to sign into an email client.
                 // We use FormSubmit (no backend needed). First time only: it will ask YOU (the receiver)
                 // to confirm/activate via an email from FormSubmit. After activation, it just works.
                 const sendDirect = async () => {
@@ -547,12 +660,13 @@ ${template}
 
                 try {
                     await sendDirect();
-                    showToast('✅ Enviado. ¡Gracias!');
+                    markFbSentNow();
+                    showToast(i18n.t('feedbackSent'));
                 } catch (e) {
                     // Network/CORS blocked, or service down: fall back to copy + optional mailto.
                     try {
                         await navigator.clipboard.writeText(payload);
-                        showToast('📋 Copiado. Si querés, pegalo en un mail.');
+                        showToast(i18n.t('feedbackCopied'));
                     } catch (_) {
                         if (textarea) {
                             textarea.value = payload;
@@ -576,7 +690,7 @@ ${template}
                 const payload = buildPayload();
                 try {
                     await navigator.clipboard.writeText(payload);
-                    showToast('✅ Copiado al portapapeles');
+                    showToast(i18n.t('feedbackCopied'));
                 } catch (e) {
                     // Fallback: select text for manual copy
                     if (textarea) {
@@ -625,9 +739,9 @@ ${template}
                         </div>
                     </div>
                     <div class="slot-info">
-                        <span>🗺 ${save.biomeName || 'Bosque'} (${save.biomeNum || 1}/12)</span>
+                        <span>🗺️ ${save.biomeName || 'Bosque'} (${save.biomeNum || 1}/12)</span>
                         <span>⏱ ${Utils.formatTime(save.playTime || 0)}</span>
-                        <span>⚔ Nivel ${save.level || 1}</span>
+                        <span>⚔️ Nivel ${save.level || 1}</span>
                         <span>📅 ${save.lastPlayed || 'Nuevo'}</span>
                     </div>
                     <div class="slot-runes">
@@ -653,7 +767,7 @@ ${template}
             } else {
                 slot.innerHTML = `
                     <div class="slot-title">SLOT ${i}</div>
-                    <p>➕ Nueva Partida</p>
+                    <p>➕ ${i18n.t('newGame')}</p>
                 `;
                 slot.onclick = () => {
                     AudioManager.play('menuClick');
@@ -710,7 +824,9 @@ ${template}
 
     startNewGame() {
         const ev = (typeof this.eventsEnabled === 'boolean') ? this.eventsEnabled : true;
-        Game.newGame(this.selectedSlot, this.selectedDifficulty, ev);
+        const seedInput = document.getElementById('seed-input');
+        const seedText = seedInput ? seedInput.value.trim() : '';
+        Game.newGame(this.selectedSlot, this.selectedDifficulty, ev, seedText);
         this.showScreen('game-screen');
         Game.start();
     },
@@ -743,10 +859,40 @@ ${template}
             };
         });
 
-        document.getElementById('btn-apply-settings').onclick = () => {
+                // Language selector (ES/EN)
+        const langButtons = document.querySelectorAll('.language-btn');
+        if (langButtons && langButtons.length) {
+            langButtons.forEach(btn => {
+                btn.onclick = () => {
+                    langButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    AudioManager.play('menuClick');
+                };
+            });
+
+            // Ensure active button matches saved language
+            const savedLang = (window.i18n && window.i18n.currentLang) ? window.i18n.currentLang : (localStorage.getItem('spellike_language') || 'en');
+            const match = Array.from(langButtons).find(b => b.dataset && b.dataset.lang === savedLang);
+            if (match) {
+                langButtons.forEach(b => b.classList.remove('active'));
+                match.classList.add('active');
+            }
+        }
+
+document.getElementById('btn-apply-settings').onclick = () => {
             AudioManager.play('menuClick');
             this.saveSettings();
         };
+
+        // Synergy always visible setting
+        const synergyCheckbox = document.getElementById('setting-synergy-always-visible');
+        if (synergyCheckbox) {
+            synergyCheckbox.checked = this.synergyAlwaysVisible;
+            synergyCheckbox.addEventListener('change', (e) => {
+                this.synergyAlwaysVisible = e.target.checked;
+                localStorage.setItem('synergyAlwaysVisible', this.synergyAlwaysVisible);
+            });
+        }
 
         document.getElementById('btn-back-settings').onclick = () => {
             AudioManager.play('menuClick');
@@ -781,18 +927,42 @@ ${template}
                 hitflash: document.getElementById('opt-hitflash').checked
             }
         };
+        // Persist language if changed
+        const selectedLangBtn = document.querySelector('.language-btn.active');
+        const selectedLang = (selectedLangBtn && selectedLangBtn.dataset) ? selectedLangBtn.dataset.lang : null;
+        const prevLang = (window.i18n && window.i18n.currentLang) ? window.i18n.currentLang : (localStorage.getItem('spellike_language') || 'en');
+
         SaveManager.saveSettings(settings);
+
+        if (selectedLang && window.i18n && typeof window.i18n.setLanguage === 'function' && selectedLang !== prevLang) {
+            window.i18n.setLanguage(selectedLang);
+            // Force reload with explicit ?lang= so it works even if localStorage is blocked on file://
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('lang', selectedLang);
+                window.location.href = url.toString();
+            } catch (e) {
+                location.reload();
+            }
+            return;
+        }
     },
 
     setupGameUIEvents() {
+        // Some builds can miss the death screen DOM (merge/template mismatch).
+        // If it doesn't exist, death will throw and freeze the game loop.
+        this._ensureDeathScreen();
+
         // Resume
-        document.getElementById('btn-resume').onclick = () => {
+        const btnResume = document.getElementById('btn-resume');
+        if (btnResume) btnResume.onclick = () => {
             AudioManager.play('menuClick');
             Game.togglePause();
         };
 
         // Stats button - FIX
-        document.getElementById('btn-stats').onclick = () => {
+        const btnStats = document.getElementById('btn-stats');
+        if (btnStats) btnStats.onclick = () => {
             AudioManager.play('menuClick');
             this.showStatsOverlay();
         };
@@ -807,7 +977,8 @@ ${template}
         }
 
         // Settings from pause - FIX
-        document.getElementById('btn-pause-settings').onclick = () => {
+        const btnPauseSettings = document.getElementById('btn-pause-settings');
+        if (btnPauseSettings) btnPauseSettings.onclick = () => {
             AudioManager.play('menuClick');
             document.getElementById('pause-menu').classList.add('hidden');
             this.previousScreen = 'game-screen';
@@ -816,9 +987,10 @@ ${template}
         };
 
         // Abandon run - FIX
-        document.getElementById('btn-abandon').onclick = () => {
+        const btnAbandon = document.getElementById('btn-abandon');
+        if (btnAbandon) btnAbandon.onclick = () => {
             AudioManager.play('menuClick');
-            if (confirm('¿Abandonar run? Perderás todo el progreso de esta partida.')) {
+            if (confirm('Â¿Abandonar run? Perderás todo el progreso de esta partida.')) {
                 SaveManager.deleteSlot(this.selectedSlot);
                 Game.stop();
                 AudioManager.stopMusic();
@@ -828,7 +1000,8 @@ ${template}
         };
 
         // Main menu from pause
-        document.getElementById('btn-main-menu').onclick = () => {
+        const btnMainMenu = document.getElementById('btn-main-menu');
+        if (btnMainMenu) btnMainMenu.onclick = () => {
             AudioManager.play('menuClick');
             // NO guardar - solo guardar al pasar puertas
             Game.stop();
@@ -838,16 +1011,53 @@ ${template}
         };
 
         // Death buttons
-        document.getElementById('btn-retry').onclick = () => {
+        const btnRetry = document.getElementById('btn-retry');
+        if (btnRetry) btnRetry.onclick = () => {
             AudioManager.play('menuClick');
-            document.getElementById('death-screen').classList.add('hidden');
+            const ds = document.getElementById('death-screen');
+            if (ds) ds.classList.add('hidden');
             this.startNewGame();
         };
-        document.getElementById('btn-death-menu').onclick = () => {
+        const btnDeathMenu = document.getElementById('btn-death-menu');
+        if (btnDeathMenu) btnDeathMenu.onclick = () => {
             AudioManager.play('menuClick');
-            document.getElementById('death-screen').classList.add('hidden');
+            const ds = document.getElementById('death-screen');
+            if (ds) ds.classList.add('hidden');
             this.showScreen('main-menu');
         };
+    },
+
+    _ensureDeathScreen() {
+        if (document.getElementById('death-screen')) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'death-screen';
+        overlay.className = 'overlay hidden';
+        overlay.innerHTML = `
+            <div class="pause-content" style="max-width: 760px;">
+                <h2 style="margin-bottom: 12px;">💀 GAME OVER</h2>
+                <div style="text-align:left; width: 100%;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><strong>Biomas</strong>: <span id="stat-biomes">0</span></div>
+                        <div><strong>Kills</strong>: <span id="stat-kills">0</span></div>
+                        <div><strong>Daño</strong>: <span id="stat-damage">0</span></div>
+                        <div><strong>Oro</strong>: <span id="stat-gold">0</span></div>
+                        <div><strong>Tiempo</strong>: <span id="stat-time">00:00</span></div>
+                        <div><strong>MVP</strong>: <span id="stat-mvp">-</span></div>
+                        <div><strong>Esencia ganada</strong>: <span id="stat-essence-earned">0</span></div>
+                        <div><strong>Esencia total</strong>: <span id="stat-essence-total">0</span></div>
+                    </div>
+
+                    <div id="death-seed-container" style="margin-top: 14px;"></div>
+                </div>
+                <div class="pause-buttons" style="margin-top: 16px;">
+                    <button class="menu-btn" id="btn-retry">🔁 VOLVER A JUGAR</button>
+                    <button class="menu-btn" id="btn-death-menu">🏠 MENÚ PRINCIPAL</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
     },
 
     // ===========================
@@ -855,7 +1065,10 @@ ${template}
     // ===========================
 
     setupCodexEvents() {
-        const overlay = document.getElementById('codex-overlay');
+        let overlay = document.getElementById('codex-overlay');
+        if (!overlay) {
+            overlay = this._createCodexOverlay();
+        }
         if (!overlay) return;
 
         const closeBtn = document.getElementById('btn-close-codex');
@@ -884,8 +1097,8 @@ ${template}
                 if (tab === 'bestiary') this.renderBestiary();
                 if (tab === 'achievements') this.renderAchievements();
                 if (tab === 'history') this.renderRunHistory();
-                if (tab === 'book') this.renderBook();
                 if (tab === 'sets') this.renderSetsPanel();
+                if (tab === 'synergies') this.renderSynergiesCodex();
             };
         });
     },
@@ -905,7 +1118,10 @@ ${template}
     },
 
     showCodex(initialTab = 'bestiary', returnTo = 'game') {
-        const overlay = document.getElementById('codex-overlay');
+        let overlay = document.getElementById('codex-overlay');
+        if (!overlay) {
+            overlay = this._createCodexOverlay();
+        }
         if (!overlay) return;
 
         this.codexOpen = true;
@@ -931,12 +1147,122 @@ ${template}
         if (initialTab === 'bestiary') this.renderBestiary();
         if (initialTab === 'achievements') this.renderAchievements();
         if (initialTab === 'history') this.renderRunHistory();
-        if (initialTab === 'book') this.renderBook();
         if (initialTab === 'sets') this.renderSetsPanel();
+        if (initialTab === 'synergies') this.renderSynergiesCodex();
     },
 
+
+    _createCodexOverlay() {
+        try {
+            const overlay = document.createElement('div');
+            overlay.id = 'codex-overlay';
+            overlay.className = 'overlay hidden';
+            overlay.innerHTML = `
+                <div class="codex-window">
+                    <div class="codex-header">
+                        <div class="codex-title">${(window.i18n ? i18n.t('btnCodex') : 'CODEX')}</div>
+                        <button id="btn-close-codex" class="codex-close">✕</button>
+                    </div>
+        <div class="codex-tabs">
+          <button class="codex-tab active" data-tab="bestiary">${(window.i18n ? i18n.t('codexTabBestiary') : 'Bestiary')}</button>
+          <button class="codex-tab" data-tab="achievements">${(window.i18n ? i18n.t('codexTabAchievements') : 'Achievements')}</button>
+          <button class="codex-tab" data-tab="history">${(window.i18n ? i18n.t('codexTabHistory') : 'History')}</button>
+          <button class="codex-tab" data-tab="sets">${(window.i18n ? i18n.t('codexTabSets') : 'Sets')}</button>
+          <button class="codex-tab" data-tab="synergies">${(window.i18n ? i18n.t('codexTabSynergies') : 'Synergies')}</button>
+        </div>
+        <div class="codex-body">
+                        <div class="codex-panel active" id="codex-panel-bestiary">
+                            <div class="codex-split">
+                                <div id="bestiary-list" class="codex-list"></div>
+                                <div id="bestiary-detail" class="codex-detail"></div>
+                            </div>
+                        </div>
+                        <div class="codex-panel" id="codex-panel-achievements">
+                            <div id="achievements-list" class="codex-list"></div>
+                        </div>
+                        <div class="codex-panel" id="codex-panel-history">
+                            <div class="history-controls">
+                                <input id="history-filter" placeholder="${i18n.t('historyFilterPlaceholder')}" />
+                                <select id="history-sort">
+                                    <option value="date_desc">${i18n.t('historySortDate')}</option>
+                                    <option value="ng_desc">${i18n.t('historySortNg')}</option>
+                                    <option value="gold_desc">${i18n.t('historySortGold')}</option>
+                                    <option value="kills_desc">${i18n.t('historySortKills')}</option>
+                                    <option value="time_desc">${i18n.t('historySortTime')}</option>
+                                </select>
+                                <button id="btn-history-clear">${i18n.t('historyClear')}</button>
+                            </div>
+                            <div id="history-summary" class="history-summary"></div>
+                            <div class="codex-split">
+                                <div id="history-list" class="codex-list"></div>
+                                <div id="history-detail" class="codex-detail"></div>
+                            </div>
+                        </div>
+                        <div class="codex-panel" id="codex-panel-sets">
+                            <div id="sets-panel" class="codex-detail"></div>
+                        </div>
+                        <div class="codex-panel" id="codex-panel-synergies">
+                            <div id="synergies-codex" class="codex-detail">
+                                <div id="synergies-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            // Minimal styling fallback if css missing
+            if (!document.getElementById('codex-style')) {
+                const st = document.createElement('style');
+                st.id = 'codex-style';
+                st.textContent = `
+                    #codex-overlay .codex-window{width:860px;max-width:92vw;max-height:86vh;background:rgba(10,10,20,0.95);border:2px solid rgba(160,120,255,0.7);border-radius:10px;padding:10px;overflow:hidden;font-family:'Press Start 2P',monospace}
+                    #codex-overlay .codex-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+                    #codex-overlay .codex-close{background:transparent;border:0;color:white;font-size:16px;cursor:pointer}
+                    #codex-overlay .codex-tabs{display:flex;gap:6px;margin-bottom:10px}
+                    #codex-overlay .codex-tab{background:rgba(120,80,255,0.25);border:1px solid rgba(160,120,255,0.6);color:white;padding:6px 8px;cursor:pointer}
+                    #codex-overlay .codex-tab.active{background:rgba(120,80,255,0.55)}
+                    #codex-overlay .codex-body{overflow:auto;max-height:72vh}
+                    #codex-overlay .codex-panel{display:none}
+                    #codex-overlay .codex-panel.active{display:block}
+                    #codex-overlay .codex-split{display:grid;grid-template-columns:1fr 1.2fr;gap:10px}
+                    #codex-overlay .codex-list{border:1px solid rgba(255,255,255,0.15);padding:8px;max-height:64vh;overflow:auto}
+                    #codex-overlay .codex-detail{border:1px solid rgba(255,255,255,0.15);padding:8px;max-height:64vh;overflow:auto}
+                    /* SYNERGIES TAB (clean layout) */
+                    #codex-panel-synergies #synergies-codex{height:100%;overflow:auto;padding-right:6px}
+                    #codex-panel-synergies .syn-row{display:grid;grid-template-columns:220px 1fr;gap:14px;align-items:center;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:12px 14px;margin:10px 0}
+                    #codex-panel-synergies .syn-left{display:flex;align-items:center;gap:10px;min-width:0}
+                    #codex-panel-synergies .syn-icon{width:18px;height:18px;display:grid;place-items:center;opacity:0.95}
+                    #codex-panel-synergies .syn-name{font-size:12px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+                    #codex-panel-synergies .syn-right{display:grid;gap:8px;min-width:0}
+                    #codex-panel-synergies .syn-line{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:start}
+                    #codex-panel-synergies .syn-label{opacity:0.9;font-size:9px;letter-spacing:0.6px;text-transform:uppercase;line-height:1.1}
+                    #codex-panel-synergies .syn-value{font-size:10px;line-height:1.25;word-break:break-word;overflow-wrap:anywhere;min-width:0}
+                    #codex-panel-synergies .syn-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+                    #codex-panel-synergies .syn-chip{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border-radius:999px;background:rgba(120,80,255,0.12);border:1px solid rgba(160,120,255,0.35)}
+                    #codex-panel-synergies .syn-plus{opacity:0.7;margin:0 2px}
+                    #codex-panel-synergies .syn-or{opacity:0.75;margin:6px 0 4px;font-size:9px;letter-spacing:0.6px}
+                    #codex-panel-synergies .syn-combo{margin:0 0 6px}
+                    
+                    #codex-overlay .history-controls{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+                    #codex-overlay input,#codex-overlay select,#codex-overlay button{font-family:'Press Start 2P',monospace;font-size:10px}
+                `;
+                document.head.appendChild(st);
+            }
+            // Bind events now that it exists
+            this.setupCodexEvents();
+            return overlay;
+        } catch (e) {
+            console.error(e);
+            return null;
+        }
+    },
+
+
     hideCodex() {
-        const overlay = document.getElementById('codex-overlay');
+        let overlay = document.getElementById('codex-overlay');
+        if (!overlay) {
+            overlay = this._createCodexOverlay();
+        }
         if (!overlay) return;
         overlay.classList.add('hidden');
         this.codexOpen = false;
@@ -957,7 +1283,7 @@ ${template}
         if (!list || !detail) return;
 
         if (!window.Meta) {
-            list.innerHTML = '<p style="font-family:\'Press Start 2P\',monospace;font-size:10px;opacity:0.9">Meta no disponible.</p>';
+            list.innerHTML = `<p style="font-family:'Press Start 2P',monospace;font-size:10px;opacity:0.9">${i18n.t('metaNotAvailable')}</p>`;
             detail.innerHTML = '';
             return;
         }
@@ -1006,22 +1332,22 @@ ${template}
                             <div class="codex-icon">${icon}</div>
                             <div class="codex-name">${name}</div>
                         </div>
-                        <div class="codex-meta">${unlocked ? `Kills: ${kills}` : 'Bloqueado'}</div>
+                        <div class="codex-meta">${unlocked ? `${i18n.t('codexKills')}: ${kills}` : i18n.t('codexLocked')}</div>
                     </div>
                 `;
             });
         };
 
-        renderGroup('ENEMIGOS', entries.filter(e => e.kind === 'enemy'));
-        renderGroup('JEFES', entries.filter(e => e.kind === 'boss'));
+        renderGroup(i18n.t('codexEnemiesTitle'), entries.filter(e => e.kind === 'enemy'));
+        renderGroup(i18n.t('codexBossesTitle'), entries.filter(e => e.kind === 'boss'));
 
         list.innerHTML = html;
 
         // Default detail
         detail.innerHTML = `
-            <h3>Selecciona una entrada</h3>
+            <h3>${i18n.t('codexSelectEntry')}</h3>
             <p style="font-family:'Press Start 2P',monospace;font-size:10px;opacity:0.9;line-height:1.5">
-                Tip: Abrís el códex con <b>C</b>. Las entradas se desbloquean cuando derrotás al enemigo/jefe por primera vez.
+                ${i18n.t('codexTip').replace('C', '<b>C</b>')}
             </p>
         `;
 
@@ -1037,7 +1363,7 @@ ${template}
                 detail.innerHTML = `
                     <h3>???</h3>
                     <p style="font-family:'Press Start 2P',monospace;font-size:10px;opacity:0.9;line-height:1.5">
-                        Derrota a este ${kind === 'enemy' ? 'enemigo' : 'jefe'} para desbloquear información.
+            ov.textContent = (kind === 'enemy') ? i18n.t('codexUnlockEnemy') : i18n.t('codexUnlockBoss');
                     </p>
                 `;
                 return;
@@ -1048,13 +1374,13 @@ ${template}
                 <h3>${info.icon} ${info.name}</h3>
                 <p style="font-family:'Press Start 2P',monospace;font-size:10px;opacity:0.9;line-height:1.5">${info.desc}</p>
                 <div class="detail-grid">
-                    <div class="detail-card">HP Base: ${cfg.hp ?? '-'} </div>
-                    <div class="detail-card">Daño Base: ${cfg.damage ?? '-'} </div>
-                    <div class="detail-card">Velocidad: ${cfg.speed ?? '-'} </div>
-                    <div class="detail-card">Kills: ${kills}</div>
+                    <div class="detail-card">${i18n.t('codexHpBaseLabel')}: ${cfg.hp ?? '-'} </div>
+                    <div class="detail-card">${i18n.t('codexDamageBaseLabel')}: ${cfg.damage ?? '-'} </div>
+                    <div class="detail-card">${i18n.t('codexSpeedLabel')}: ${cfg.speed ?? '-'} </div>
+                    <div class="detail-card">${i18n.t('codexKills')}: ${kills}</div>
                 </div>
                 <div style="font-family:'Press Start 2P',monospace;font-size:9px;opacity:0.9;line-height:1.6">
-                    <b>Consejo:</b> ${kind === 'enemy' ? 'Leé su patrón y no te quedes quieto.' : 'Guardá dash para los ataques fuertes.'}
+                    <b>${i18n.t('codexAdviceLabel')}:</b> ${i18n.t(kind === 'enemy' ? 'codexAdviceEnemy' : 'codexAdviceBoss')}
                 </div>
             `;
         };
@@ -1074,7 +1400,7 @@ ${template}
         if (!list) return;
 
         if (!window.Meta || typeof Meta.getAchievementDB !== 'function') {
-            list.innerHTML = '<p style="font-family:\'Press Start 2P\',monospace;font-size:10px;opacity:0.9">Meta no disponible.</p>';
+            list.innerHTML = `<p style="font-family:'Press Start 2P',monospace;font-size:10px;opacity:0.9">${i18n.t('metaNotAvailable')}</p>`;
             return;
         }
 
@@ -1084,6 +1410,7 @@ ${template}
         let html = '';
         db.forEach(a => {
             const unlocked = !!(meta.ach?.unlocked?.[a.id]);
+            const loc = (window.i18n && typeof i18n.objective === 'function') ? i18n.objective(a.id) : { name: a.name, desc: a.desc };
             const p = a.progress ? a.progress(meta) : { cur: 0, target: 1 };
             const cur = Math.max(0, Math.floor(p.cur || 0));
             const target = Math.max(1, Math.floor(p.target || 1));
@@ -1096,8 +1423,8 @@ ${template}
                     <div class="a-left">
                         <div class="a-icon">${a.icon || '🏆'}</div>
                         <div style="min-width:0">
-                            <div class="a-title">${a.name}</div>
-                            <div class="a-desc">${unlocked ? a.desc : a.desc}</div>
+                            <div class="a-title">${loc.name}</div>
+                            <div class="a-desc">${loc.desc}</div>
                         </div>
                     </div>
                     <div class="a-progress">${progText}</div>
@@ -1200,9 +1527,9 @@ ${template}
         const bestTime = raw.reduce((m, r) => Math.max(m, Number(r?.time || 0)), 0);
 
         summaryEl.innerHTML = `
-            <div>Runs: <span style="color:#ffd27a">${total}</span></div>
-            <div>Mejor NG+: <span style="color:#ffd27a">${bestNg}</span> · Oro máx: <span style="color:#ffd27a">${bestGold}</span></div>
-            <div>Kills máx: <span style="color:#ffd27a">${bestKills}</span> · Tiempo máx: <span style="color:#ffd27a">${this._formatTime(bestTime)}</span></div>
+            <div>${i18n.t('historyRunsLabel')}: <span style="color:#ffd27a">${total}</span></div>
+            <div>${i18n.t('historyBestNgLabel')}: <span style="color:#ffd27a">${bestNg}</span> | ${i18n.t('historyMaxGoldLabel')}: <span style="color:#ffd27a">${bestGold}</span></div>
+            <div>${i18n.t('historyMaxKillsLabel')}: <span style="color:#ffd27a">${bestKills}</span> | ${i18n.t('historyBestTimeLabel')}: <span style="color:#ffd27a">${this._formatTime(bestTime)}</span></div>
         `;
 
         // Filter
@@ -1243,8 +1570,8 @@ ${template}
         listEl.innerHTML = '';
 
         if (items.length === 0) {
-            listEl.innerHTML = `<div class="history-empty">No hay runs para mostrar.</div>`;
-            detailEl.innerHTML = `<div class="history-detail-box"><h3>📌 Historial</h3><div class="history-empty">Jugá una run y al morir se guarda acá.</div></div>`;
+            listEl.innerHTML = `<div class="history-empty">${i18n.t('historyNoRuns')}</div>`;
+            detailEl.innerHTML = `<div class="history-detail-box"><h3>📌 ${i18n.t('historyDetailTitle')}</h3><div class="history-empty">${i18n.t('historyDetailHint')}</div></div>`;
             return;
         }
 
@@ -1257,8 +1584,10 @@ ${template}
             const entry = document.createElement('div');
             entry.className = 'history-entry' + (idx === this._selectedHistoryIndex ? ' active' : '');
             const ng = Number(r?.ngPlusLevel || 0);
-            const biome = (r?.biome != null) ? `Bioma ${r.biome}` : 'Bioma -';
-            const room = (r?.room != null) ? `Sala ${r.room}` : 'Sala -';
+            const biomeLabel = (window.i18n ? i18n.t('hudBiome') : 'Bioma');
+            const biome = (r?.biome != null) ? `${biomeLabel} ${r.biome}` : `${biomeLabel} -`;
+            const roomLabel = (window.i18n ? i18n.t('hudRoom') : 'Sala');
+            const room = (r?.room != null) ? `${roomLabel} ${r.room}` : `${roomLabel} -`;
             const gold = Number(r?.gold || 0);
             const kills = Number(r?.kills || 0);
 
@@ -1267,7 +1596,7 @@ ${template}
                     <div class="date">${r?.date || ''}</div>
                     <div class="ng">NG+ ${ng}</div>
                 </div>
-                <div class="bottom">${biome} · ${room}<br/>Oro: ${gold} · Kills: ${kills} · Tiempo: ${this._formatTime(r?.time)}</div>
+                <div class="bottom">${biome} | ${room}<br/>Oro: ${gold} | Kills: ${kills} | Tiempo: ${this._formatTime(r?.time)}</div>
             `;
 
             entry.onclick = () => {
@@ -1304,7 +1633,7 @@ ${template}
                     <div class="label">Tiempo</div><div>${this._formatTime(e.time)}</div>
                 </div>
                 <div style="margin-top:12px; font-size:10px; color:rgba(255,255,255,0.65); line-height:1.6;">
-                    Tip: filtrá por “NG+ 3”, “Bioma 2”, “oro”, etc.
+                    Tip: filtrá por â€œNG+ 3â€, â€œBioma 2â€, â€œoroâ€, etc.
                 </div>
             </div>
         `;
@@ -1368,7 +1697,7 @@ ${template}
                 <span class="tooltip-name">${rune.name}</span>
             </div>
             <div class="tooltip-desc">${rune.desc || 'Runa mágica'}</div>
-            <div class="tooltip-rarity rarity-${rune.rarity}">${rune.rarity?.toUpperCase() || 'COMÚN'}</div>
+            <div class="tooltip-rarity rarity-${rune.rarity}">${rune.rarity?.toUpperCase() || 'COMÃšN'}</div>
         `;
 
         document.body.appendChild(tooltip);
@@ -1410,24 +1739,24 @@ ${template}
         modal.className = 'loot-modal';
         modal.innerHTML = `
             <div class="loot-content">
-                <h2>¡ELIGE TU RECOMPENSA!</h2>
+                <h2>${i18n.t('lootChooseTitle')}</h2>
                 <div class="loot-options">
                     <div class="loot-option rune-option" id="choose-rune">
-                        <div class="option-type">RUNA</div>
+                        <div class="option-type">${i18n.t('lootRune')}</div>
                         <div class="option-icon">${runeOption.icon}</div>
                         <div class="option-name">${runeOption.name}</div>
                         <div class="option-desc">${runeOption.desc || ''}</div>
                         <div class="option-rarity rarity-${runeOption.rarity}">${runeOption.rarity?.toUpperCase() || 'COMÚN'}</div>
                     </div>
-                    <div class="loot-divider">O</div>
+                    <div class="loot-divider">${i18n.t('lootOr')}</div>
                     <div class="loot-option item-option" id="choose-item">
-                        <div class="option-type">ITEM</div>
+                        <div class="option-type">${i18n.t('lootItem')}</div>
                         <div class="option-icon">${itemOption.icon}</div>
                         <div class="option-name">${itemOption.name}</div>
                         <div class="option-desc">${itemOption.desc || itemOption.effect || ''}</div>
                     </div>
                 </div>
-                <button class="discard-btn" id="discard-loot">Descartar Ambos</button>
+                <button class="discard-btn" id="discard-loot">${i18n.t('lootDiscardBoth')}</button>
             </div>
         `;
 
@@ -1578,7 +1907,7 @@ ${template}
             } else {
                 slotsHtml += `
                     <div class="swap-slot" data-slot="${i}">
-                        <div class="swap-icon">➕</div>
+                        <div class="swap-icon">âž•</div>
                         <div class="swap-name">Slot vacío</div>
                         <div class="swap-desc">Equipar aquí</div>
                     </div>
@@ -1645,14 +1974,14 @@ ${template}
         let pickedBlessing = null;
 
         const render = () => {
-            const leftTitle = pickedBlessing ? 'ELIGE UNA MALDICIÓN' : 'ELIGE UNA BENDICIÓN';
+            const leftTitle = pickedBlessing ? 'ELIGE UNA MALDICIÃ“N' : 'ELIGE UNA BENDICIÃ“N';
             const list = pickedBlessing ? curses : blessings;
 
             let cards = '';
             list.forEach((opt, idx) => {
                 cards += `
                     <div class="reward-card epic" style="cursor:pointer" data-idx="${idx}">
-                        <div class="reward-icon">${pickedBlessing ? '☠️' : '✨'}</div>
+                        <div class="reward-icon">${pickedBlessing ? '☠️' : 'âœ¨'}</div>
                         <div class="reward-name">${opt.name}</div>
                         <div class="reward-desc">${opt.desc}</div>
                     </div>
@@ -1661,10 +1990,10 @@ ${template}
 
             modal.innerHTML = `
                 <div class="loot-content">
-                    <h2>NG+ ${Game.ngPlusLevel} — ${leftTitle}</h2>
+                    <h2>NG+ ${Game.ngPlusLevel} â€” ${leftTitle}</h2>
                     <p style="margin:0 0 10px 0; opacity:0.9">
-                        Mutación del bioma: <b>${Game.biomeMutation ? Game.biomeMutation.name : '—'}</b>
-                        ${Game.biomeMutation ? ` — ${Game.biomeMutation.desc}` : ''}
+                        Mutación del bioma: <b>${Game.biomeMutation ? Game.biomeMutation.name : 'â€”'}</b>
+                        ${Game.biomeMutation ? ` â€” ${Game.biomeMutation.desc}` : ''}
                     </p>
                     ${pickedBlessing ? `<p style="margin:0 0 10px 0; opacity:0.9">Bendición elegida: <b>${pickedBlessing.name}</b></p>` : ''}
                     <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
@@ -1728,7 +2057,7 @@ ${template}
 
         modal.innerHTML = `
             <div class="loot-content">
-                <h2>⛩️ SANTUARIO</h2>
+                <h2>â›©ï¸ SANTUARIO</h2>
                 <p style="margin:0 0 10px 0; opacity:0.9">Elige una bendición rápida:</p>
                 <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
                     ${cards}
@@ -1751,6 +2080,152 @@ ${template}
         });
 
         const closeBtn = modal.querySelector('#close-shrine');
+        if (closeBtn) closeBtn.onclick = () => { modal.remove(); Game.paused = false; };
+    },
+
+    // ===========================
+    // CAMPFIRE EVENT
+    // ===========================
+    showCampfireChoice() {
+        Game.paused = true;
+
+        const modal = document.createElement('div');
+        modal.className = 'loot-modal';
+        modal.id = 'campfire-modal';
+
+        const p = Game.player;
+
+        const options = [
+            { id: 'rest', icon: '🔥', name: 'Descansar', desc: 'Cura 35% de tu HP maximo', apply: () => p.heal(Math.floor(p.maxHp * 0.35)) },
+            { id: 'sharpen', icon: '⚔️', name: 'Afilado', desc: '+4 dano permanente (run)', apply: () => { p.damage += 4; } },
+            { id: 'brew', icon: '🧪', name: 'Reponer', desc: '+1 pocion', apply: () => { p.potions = Math.min(10, p.potions + 1); } }
+        ];
+
+        let cards = '';
+        options.forEach((opt, idx) => {
+            cards += `
+                <div class="reward-card rare" style="cursor:pointer" data-idx="${idx}">
+                    <div class="reward-icon">${opt.icon}</div>
+                    <div class="reward-name">${opt.name}</div>
+                    <div class="reward-desc">${opt.desc}</div>
+                </div>
+            `;
+        });
+
+        modal.innerHTML = `
+            <div class="loot-content">
+                <h2>🔥 HOGUERA</h2>
+                <p style="margin:0 0 10px 0; opacity:0.9">Tomate un respiro y elegi un beneficio:</p>
+                <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
+                    ${cards}
+                </div>
+                <button class="discard-btn" id="close-campfire">Cerrar</button>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        modal.querySelectorAll('[data-idx]').forEach(card => {
+            card.onclick = () => {
+                const idx = parseInt(card.dataset.idx);
+                options[idx].apply();
+                ParticleSystem.burst(p.centerX, p.centerY, 18, { color: '#ffcc80', life: 0.7, size: 4, speed: 3 });
+                AudioManager.play('pickup');
+                modal.remove();
+                Game.paused = false;
+            };
+        });
+
+        const closeBtn = modal.querySelector('#close-campfire');
+        if (closeBtn) closeBtn.onclick = () => { modal.remove(); Game.paused = false; };
+    },
+
+    // ===========================
+    // PACT EVENT
+    // ===========================
+    showPactChoice() {
+        Game.paused = true;
+
+        const modal = document.createElement('div');
+        modal.className = 'loot-modal';
+        modal.id = 'pact-event-modal';
+
+        const p = Game.player;
+
+        const options = [];
+
+        const optRune = {
+            id: 'rune_slot', icon: '🎒',
+            name: i18n.t('pactCursedBagTitle'),
+            desc: i18n.t('pactCursedBagDesc'),
+            apply: () => {
+                if (typeof p.addRuneSlots === 'function') p.addRuneSlots(1);
+                p.maxHp = Math.max(30, Math.floor(p.maxHp * 0.9));
+                p.hp = Math.min(p.hp, p.maxHp);
+            }
+        };
+
+        const optActive = {
+            id: 'active_slot', icon: '🧰',
+            name: i18n.t('pactProfaneSheathTitle'),
+            desc: i18n.t('pactProfaneSheathDesc'),
+            apply: () => {
+                if (typeof p.addActiveSlots === 'function') p.addActiveSlots(1);
+                p.speed = Math.max(80, Math.floor(p.speed * 0.88));
+            }
+        };
+
+        const optRage = {
+            id: 'rage', icon: '☠️',
+            name: i18n.t('pactFuryTitle'),
+            desc: i18n.t('pactFuryDesc'),
+            apply: () => {
+                p.damage = Math.floor(p.damage * 1.2);
+                p.maxMana = Math.max(20, Math.floor(p.maxMana * 0.85));
+                p.mana = Math.min(p.mana, p.maxMana);
+            }
+        };
+
+        options.push(optRune);
+        if (!p.activeItems || p.activeItems.length < 2) options.push(optActive);
+        options.push(optRage);
+
+        let cards = '';
+        options.forEach((opt, idx) => {
+            cards += `
+                <div class="reward-card epic" style="cursor:pointer" data-idx="${idx}">
+                    <div class="reward-icon">${opt.icon}</div>
+                    <div class="reward-name">${opt.name}</div>
+                    <div class="reward-desc">${opt.desc}</div>
+                </div>
+            `;
+        });
+
+        modal.innerHTML = `
+            <div class="loot-content">
+                <h2>${i18n.t('pactTitle')}</h2>
+                <p style="margin:0 0 10px 0; opacity:0.9">${i18n.t('pactSubtitle')}</p>
+                <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
+                    ${cards}
+                </div>
+                <button class="discard-btn" id="close-pact-event">${i18n.t('pactReject')}</button>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        modal.querySelectorAll('[data-idx]').forEach(card => {
+            card.onclick = () => {
+                const idx = parseInt(card.dataset.idx);
+                options[idx].apply();
+                ParticleSystem.burst(p.centerX, p.centerY, 18, { color: '#ef9a9a', life: 0.7, size: 4, speed: 3 });
+                AudioManager.play('pickup');
+                modal.remove();
+                Game.paused = false;
+            };
+        });
+
+        const closeBtn = modal.querySelector('#close-pact-event');
         if (closeBtn) closeBtn.onclick = () => { modal.remove(); Game.paused = false; };
     },
     // ===========================
@@ -1778,6 +2253,40 @@ ${template}
             }
         });
 
+
+        // Sanitize shop inventory against caps (fire rate cap x2, Void Touch max 2)
+        const sanitizeShopInventory = () => {
+            const p = Game.player;
+            if (!p) return;
+            for (const entry of shop.inventory) {
+                if (!entry || entry.sold) continue;
+                // Never touch permanent upgrades
+                const itemId = entry.kind === 'item' ? entry.item?.id : null;
+                if (itemId === 'rune_pouch' || itemId === 'active_bandolier') continue;
+
+                if (entry.kind === 'rune') {
+                    const rarity = entry.rune?.rarity || 'rare';
+                    let tries = 0;
+                    while (tries++ < 20 && entry.rune && Utils.shouldExcludeRune(entry.rune, p)) {
+                        const r = getRandomRune(rarity);
+                        if (r) entry.rune = { ...r, rarity };
+                        else break;
+                    }
+                } else if (entry.kind === 'item') {
+                    // Only filter normal items (not actives/potions)
+                    if (entry.item?.type === 'item') {
+                        let tries = 0;
+                        while (tries++ < 20 && entry.item && Utils.shouldExcludeItem(entry.item, p)) {
+                            const it = ItemDatabase.getRandomItem(entry.item.rarity || 'common');
+                            if (it) entry.item = { ...it, type: it.type || 'item' };
+                            else break;
+                        }
+                    }
+                }
+            }
+        };
+
+        sanitizeShopInventory();
         const rerollShop = () => {
             if (!shop.allowReroll) return;
             if ((shop.rerollsLeft || 0) <= 0) return;
@@ -1792,7 +2301,12 @@ ${template}
 
                 if (entry.kind === 'rune') {
                     const rarity = entry.rune?.rarity || 'rare';
-                    const newRune = getRandomRune(rarity);
+                    let newRune = null;
+                    for (let t = 0; t < 20; t++) {
+                        const r = getRandomRune(rarity);
+                        if (!r) continue;
+                        if (!Utils.shouldExcludeRune(r, Game.player)) { newRune = r; break; }
+                    }
                     if (newRune) entry.rune = { ...newRune, rarity };
                 } else if (entry.kind === 'item') {
                     // Reroll active items among the known set
@@ -1833,38 +2347,38 @@ ${template}
                         <div class="reward-desc">${desc}</div>
                         <div class="reward-desc" style="margin-top:6px; opacity:0.9">💰 ${price}</div>
                         <button class="action-btn" style="margin-top:8px; padding:8px 12px; font-size:12px" ${sold || !canAfford ? 'disabled' : ''}>
-                            ${sold ? 'COMPRADO' : (canAfford ? 'COMPRAR' : 'SIN ORO')}
+                            ${sold ? i18n.t('shopBought') : (canAfford ? i18n.t('shopBuy') : i18n.t('shopNoGold'))}
                         </button>
                         ${lockBtn}
                     </div>
                 `;
             });
 
-            const title = shop.theme === 'blackmarket' ? '☠️ MERCADO NEGRO' : '🛒 TIENDA';
+            const title = shop.theme === 'blackmarket' ? i18n.t('shopBlackmarket') : i18n.t('shopTitle');
             const sub = shop.theme === 'blackmarket'
-                ? 'Ofertas poderosas… con consecuencias.'
-                : 'Compra runas, activos y mejoras.';
+                ? i18n.t('shopSubBlackmarket')
+                : i18n.t('shopSub');
 
             const rerollBtn = shop.allowReroll ? `
                 <button class="action-btn" id="reroll-shop" style="margin:6px 6px 0 0; padding:8px 12px; font-size:12px" ${(shop.rerollsLeft || 0) <= 0 ? 'disabled' : ''}>
-                    🔄 REROLL (${shop.rerollsLeft || 0})
+                    ${i18n.f('shopReroll',{n:(shop.rerollsLeft||0)})}
                 </button>` : '';
 
             const recyclerBtn = `
                 <button class="action-btn" id="open-recycler" style="margin:6px 6px 0 0; padding:8px 12px; font-size:12px">
-                    ♻️ RECICLAR
+                    ${i18n.t('shopRecycle')}
                 </button>`;
 
             const sellerBtn = `
                 <button class="action-btn" id="open-seller" style="margin:6px 6px 0 0; padding:8px 12px; font-size:12px">
-                    💱 VENDER
+                    ${i18n.t('shopSell')}
                 </button>`;
 
             modal.innerHTML = `
                 <div class="loot-content">
                     <h2>${title}</h2>
                     <p style="margin:0 0 6px 0; opacity:0.9">${sub}</p>
-                    <p style="margin:0 0 10px 0; opacity:0.9">Oro: 💰 ${Game.player.gold}</p>
+                    <p style="margin:0 0 10px 0; opacity:0.9">${i18n.f('shopGoldLabel',{n:Game.player.gold})}</p>
                     <div style="display:flex; justify-content:center; gap:8px; flex-wrap:wrap">
                         ${rerollBtn}
                         ${recyclerBtn}
@@ -1873,7 +2387,7 @@ ${template}
                     <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px">
                         ${itemsHtml}
                     </div>
-                    <button class="discard-btn" id="close-shop">Cerrar</button>
+                    <button class="discard-btn" id="close-shop">${i18n.t('shopClose')}</button>
                 </div>
             `;
 
@@ -1979,10 +2493,10 @@ ${template}
             entries.push({ kind: 'active', idx, obj: it, rarity: (it.rarity || 'rare') });
         });
 
-        const title = mode === 'sell' ? '💱 VENDER' : '♻️ RECICLAR';
+        const title = mode === 'sell' ? i18n.t('shopSell') : i18n.t('shopRecycle');
         const hint = mode === 'sell'
-            ? 'Elige una Runa o Activo para vender por oro.'
-            : 'Elige una Runa o Activo para reciclar: te da otro de la misma calidad.';
+            ? i18n.t('shopSellHint')
+            : i18n.t('shopRecycleHint');
 
         // Gold values
         const runeSellValue = (rarity) => {
@@ -2006,7 +2520,7 @@ ${template}
             listHtml = `<p style="opacity:0.85">No tenés runas/activos para ${mode === 'sell' ? 'vender' : 'reciclar'}.</p>`;
         } else {
             entries.forEach((e, i) => {
-                const icon = e.obj.icon || '❓';
+                const icon = e.obj.icon || 'â“';
                 const name = e.obj.name || 'Sin nombre';
                 const kind = e.kind === 'rune' ? 'RUNA' : 'ACTIVO';
                 const rarity = (e.rarity || 'common');
@@ -2136,7 +2650,7 @@ ${template}
             for (const it of emptyRunes) {
                 const btn = document.createElement('button');
                 btn.className = 'forge-rune-btn' + (it.idx === selectedIdx ? ' active' : '');
-                btn.textContent = `⬜ Runa Vacía (slot ${it.idx + 1})`;
+                btn.textContent = `â¬œ Runa Vacía (slot ${it.idx + 1})`;
                 btn.onclick = () => { selectedIdx = it.idx; renderList(); };
                 list.appendChild(btn);
             }
@@ -2159,7 +2673,7 @@ ${template}
             };
         }
 
-        if (info) info.textContent = `Costo base: ${forgeData.cost} oro • Bioma: ${forgeData.biomeId}`;
+        if (info) info.textContent = `Costo base: ${forgeData.cost} oro â€¢ Bioma: ${forgeData.biomeId}`;
 
         // Docs panel
         if (docs && window.RuneScript && typeof RuneScript.getDocsHTML === 'function') {
@@ -2190,7 +2704,7 @@ ${template}
             lastValidation = res;
             const out = document.getElementById('forge-validate-output');
             if (out) {
-                out.textContent = res.ok ? '✅ OK' : ('❌ ' + res.error);
+                out.textContent = res.ok ? 'âœ… OK' : ('❌ ' + res.error);
                 out.className = res.ok ? 'forge-ok' : 'forge-bad';
             }
             return res;
@@ -2277,10 +2791,10 @@ ${template}
             entries.push({ kind: 'active', idx, icon: it.icon, name: it.name, desc: it.desc || it.effect || '', rarity: it.rarity || 'common' });
         });
 
-        const title = (mode === 'sell') ? '💱 VENDER' : '♻️ RECICLAR';
+        const title = (mode === 'sell') ? i18n.t('shopSell') : i18n.t('shopRecycle');
         const hint = (mode === 'sell')
-            ? 'Elige una runa o activo para vender por oro.'
-            : 'Elige una runa o activo para intercambiar por otro de la misma rareza.';
+            ? i18n.t('shopSellHint')
+            : i18n.t('shopRecycleHint');
 
         const overlay = document.createElement('div');
         overlay.className = 'loot-modal';
@@ -2396,24 +2910,24 @@ ${template}
 
         overlay.innerHTML = `
             <div class="stats-content">
-                <h2>📊 ESTADÍSTICAS</h2>
+                <h2>${i18n.t('statsTitle')}</h2>
                 <div class="stats-grid">
-                    <div class="stat-item"><span>Bioma</span><span>${Game.currentBiome}</span></div>
-                    <div class="stat-item"><span>Sala</span><span>${d.currentRoomIndex + 1}/${d.roomsPerBiome}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statBiome')}</span><span>${Game.currentBiome}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statRoom')}</span><span>${d.currentRoomIndex + 1}/${d.roomsPerBiome}</span></div>
                     <div class="stat-item"><span>HP</span><span>${Math.floor(p.hp)}/${p.maxHp}</span></div>
-                    <div class="stat-item"><span>Oro</span><span>💰 ${p.gold}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statGold')}</span><span>💰 ${p.gold}</span></div>
                     <div class="stat-item"><span>Kills</span><span>💀 ${p.stats.kills}</span></div>
-                    <div class="stat-item"><span>Daño Infligido</span><span>⚔️ ${p.stats.damageDealt}</span></div>
-                    <div class="stat-item"><span>Daño Recibido</span><span>❤️ ${p.stats.damageTaken}</span></div>
-                    <div class="stat-item"><span>Salas Limpiadas</span><span>🚪 ${p.stats.roomsCleared}</span></div>
-                    <div class="stat-item"><span>Biomas Completados</span><span>🗺️ ${p.stats.biomesCleared}</span></div>
-                    <div class="stat-item"><span>Tiempo</span><span>⏱️ ${Utils.formatTime(Game.playTime)}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statDmgDealt')}</span><span>⚔️ ${p.stats.damageDealt}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statDmgTaken')}</span><span>❤️ ${p.stats.damageTaken}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statRoomsCleared')}</span><span>🚪 ${p.stats.roomsCleared}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statBiomesCleared')}</span><span>🗺️ ${p.stats.biomesCleared}</span></div>
+                    <div class="stat-item"><span>${i18n.t('statTime')}</span><span>⏱️ ${Utils.formatTime(Game.playTime)}</span></div>
                 </div>
-                <h3>RUNAS EQUIPADAS</h3>
+                <h3>${i18n.t('statsRunesEquipped')}</h3>
                 <div class="stats-runes">
                     ${p.runes.map((r, i) => r ? `<div class="stat-rune">${r.icon} ${r.name}</div>` : '').join('')}
                 </div>
-                <button class="close-stats-btn" id="close-stats">CERRAR</button>
+                <button class="close-stats-btn" id="close-stats">${i18n.t('btnClose')}</button>
             </div>
         `;
 
@@ -2508,6 +3022,106 @@ ${template}
                 eventNameEl.textContent = '---';
             }
         }
+
+        // Set bonus display (Top Left)
+        try {
+            const setRow = document.getElementById('set-row');
+            const setNameEl = document.getElementById('set-name');
+            const sets = window.SetDatabase || {};
+
+            const owned = {};
+            if (player && Array.isArray(player.passiveItems)) {
+                for (const it of player.passiveItems) {
+                    if (!it || !it.setId) continue;
+                    owned[it.setId] = owned[it.setId] || new Set();
+                    if (it.setPiece) owned[it.setId].add(it.setPiece);
+                }
+            }
+
+            const completed = [];
+            for (const sid of Object.keys(sets)) {
+                const def = sets[sid];
+                const total = (def.pieces || []).length;
+                const got = owned[sid] ? owned[sid].size : 0;
+                if (total > 0 && got >= total) completed.push(def.name || sid);
+            }
+
+            if (setRow && setNameEl) {
+                if (completed.length) {
+                    setRow.style.display = 'flex';
+                    setNameEl.textContent = completed.map(n => `${(window.i18n ? i18n.t('setBonus') : 'BONUS DE SET')}: ${n}`).join(' | ');
+                } else {
+                    setRow.style.display = 'none';
+                }
+            }
+        } catch (e) { }
+
+        // Run Objectives
+        const objList = document.getElementById('objectives-list');
+        if (objList && window.Game && Array.isArray(Game.runObjectives)) {
+            objList.innerHTML = '';
+            const list = Game.runObjectives;
+            if (!list.length) {
+                objList.innerHTML = '<div class="objective"><div class="obj-line"><span class="obj-name">Sin objetivos</span></div></div>';
+            } else {
+                list.forEach(o => {
+                    const cur = (Game.getObjectiveProgress ? Game.getObjectiveProgress(o) : 0) || 0;
+                    const target = (typeof o.target === 'number') ? o.target : 1;
+                    const done = !!o.completed || cur >= target;
+                    const curVal = Math.floor(cur);
+                    const targetVal = Math.max(1, Math.floor(target));
+                    const progText = (o.id === 'time')
+                        ? `${Utils.formatTime(curVal)}/${Utils.formatTime(targetVal)}`
+                        : `${Math.min(curVal, targetVal)}/${targetVal}`;
+                    const rewardText = (o.reward && o.reward.text) ? o.reward.text : '';
+
+                    const div = document.createElement('div');
+                    div.className = 'objective' + (done ? ' done' : '');
+                    div.innerHTML = `
+                        <div class="obj-line">
+                            <span class="obj-name">${done ? 'OK ' : ''}${o.name || 'Objetivo'}</span>
+                            <span class="obj-progress">${progText}</span>
+                        </div>
+                        <div class="obj-desc">${o.desc || ''}</div>
+                        ${rewardText ? `<div class="obj-reward">Recompensa: ${rewardText}</div>` : ''}
+                    `;
+                    objList.appendChild(div);
+                });
+            }
+        }
+
+        // HUD Synergies (below objectives)
+        const synPanel = document.getElementById('synergies-panel');
+        const synList = document.getElementById('synergies-list');
+        if (synPanel && synList && window.SynergySystem) {
+            const synergies = SynergySystem.getActiveSynergies ? SynergySystem.getActiveSynergies() : [];
+            const has = Array.isArray(synergies) && synergies.length > 0;
+
+            // Mode A: always visible (show empty state)
+            // Mode B: visible only when toggled AND there are active synergies
+            const visible = this.synergyAlwaysVisible ? true : (this.synergyPanelVisible && has);
+
+            if (!visible) {
+                synPanel.classList.add('hidden');
+            } else {
+                synPanel.classList.remove('hidden');
+                synList.innerHTML = '';
+                if (!has) {
+                    synList.innerHTML = `<div class="synergy-item"><div class="syn-name">${(window.i18n&&i18n.t)?i18n.t('synergiesNoneTitle'):'No active synergies'}</div><div class="syn-desc">${(window.i18n&&i18n.t)?i18n.t('synergiesNoneDesc'):'Combine runes to activate synergies.'}</div></div>`;
+                } else {
+                    synergies.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = 'synergy-item';
+                        div.innerHTML = `
+                            <div class="syn-name">⚡ ${s.name}</div>
+                            <div class="syn-desc">${s.desc || ''}</div>
+                        `;
+                        synList.appendChild(div);
+                    });
+                }
+            }
+        }
+
 
         // Bottom Center: Runs
         this.ensureRuneSlotElements(player.runes.length);
@@ -2607,7 +3221,7 @@ ${template}
             } else {
                 active1.classList.add('locked');
                 active1.innerHTML = `<span class="key-hint">G</span>`;
-                active1.title = 'Bloqueado (Mejorar en tienda)';
+        active1.title = i18n.t('lockedUpgradeShop');
             }
         }
 
@@ -2662,6 +3276,27 @@ ${template}
 
             const elGold = document.getElementById('pause-gold');
             if (elGold && p) elGold.textContent = `💰 ${p.gold}`;
+            
+            // Add seed display
+            const seedContainer = document.getElementById('pause-seed-container');
+            if (seedContainer && Game.seedText) {
+                seedContainer.innerHTML = `
+                    <div class="seed-display">
+                        <span>🎲 Seed: <code>${Game.seedText}</code></span>
+                        <button id="pause-copy-seed" class="copy-seed-btn">📋 Copiar</button>
+                    </div>
+                `;
+                
+                const copyBtn = document.getElementById('pause-copy-seed');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', () => {
+                        navigator.clipboard.writeText(Game.seedText).then(() => {
+                            this.showToast('📋 Seed copiada');
+                        });
+                        AudioManager.play('menuClick');
+                    });
+                }
+            }
         } catch (e) { }
     },
 
@@ -2670,14 +3305,24 @@ ${template}
     },
 
     showDeathScreen(player) {
+        this._ensureDeathScreen();
         const screen = document.getElementById('death-screen');
+        if (!screen) {
+            console.warn('[UI] death-screen missing; cannot show death UI');
+            return;
+        }
         screen.classList.remove('hidden');
 
-        document.getElementById('stat-biomes').textContent = player.stats.biomesCleared;
-        document.getElementById('stat-kills').textContent = player.stats.kills;
-        document.getElementById('stat-damage').textContent = Utils.formatNumber(player.stats.damageDealt);
-        document.getElementById('stat-gold').textContent = player.gold;
-        document.getElementById('stat-time').textContent = Utils.formatTime(Game.playTime);
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+
+        setText('stat-biomes', player?.stats?.biomesCleared ?? 0);
+        setText('stat-kills', player?.stats?.kills ?? 0);
+        setText('stat-damage', Utils.formatNumber(player?.stats?.damageDealt ?? 0));
+        setText('stat-gold', player?.gold ?? 0);
+        setText('stat-time', Utils.formatTime(Game?.playTime ?? 0));
 
         // Meta currency (v0.1.2): show essence gained this run and total
         try {
@@ -2689,8 +3334,29 @@ ${template}
             if (elTotal) elTotal.textContent = total;
         } catch (e) { }
 
-        const mvpRune = player.runes.find(r => r !== null);
-        document.getElementById('stat-mvp').textContent = mvpRune ? mvpRune.name : '-';
+        const mvpRune = (player?.runes || []).find(r => r !== null);
+        setText('stat-mvp', mvpRune ? mvpRune.name : '-');
+
+        // Add seed display
+        const deathSeedContainer = document.getElementById('death-seed-container');
+        if (deathSeedContainer && Game.seedText) {
+            deathSeedContainer.innerHTML = `
+                <div class="seed-display">
+                    <span>🎲 Seed usada: <code>${Game.seedText}</code></span>
+                    <button id="death-copy-seed" class="copy-seed-btn">📋 Copiar</button>
+                </div>
+            `;
+            
+            const copyBtn = document.getElementById('death-copy-seed');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => {
+                    navigator.clipboard.writeText(Game.seedText).then(() => {
+                        this.showToast('📋 Seed copiada');
+                    });
+                    AudioManager.play('menuClick');
+                });
+            }
+        }
     },
 
     showRewardScreen(rewards) {
@@ -2783,7 +3449,7 @@ screen.classList.remove('hidden');
             const card = document.createElement('div');
             card.className = 'choice-card';
             card.innerHTML = `
-                <div class="choice-icon">${rel.icon || '✨'}</div>
+                <div class="choice-icon">${rel.icon || 'âœ¨'}</div>
                 <div class="choice-name">${rel.name || 'Reliquia'}</div>
                 <div class="choice-desc">${rel.desc || ''}</div>
             `;
@@ -2830,7 +3496,7 @@ screen.classList.remove('hidden');
         }
 
         const iconFor = (type) => {
-            const map = { combat: '⚔️', event: '🎁', miniboss: '👹', elite: '⭐', boss: '👑' };
+            const map = { combat: '⚔️', event: '🎁', miniboss: '💹', elite: '⭐', boss: '👑' };
             return map[type] || '🧩';
         };
 
@@ -2984,36 +3650,186 @@ screen.classList.remove('hidden');
             const s = sets[sid];
             const got = owned[sid] ? owned[sid].size : 0;
             const total = (s.pieces || []).length;
-            const piecesHtml = (s.pieces || []).map(name => {
-                const ok = owned[sid] && owned[sid].has(name);
-                return `<div class="set-piece"><span>${name}</span><span class="${ok ? 'ok' : 'no'}">${ok ? '✅' : '❌'}</span></div>`;
+            const piecesHtml = (s.pieces || []).map(pieceId => {
+                const ok = owned[sid] && owned[sid].has(pieceId);
+
+                // Set pieces are item ids (e.g. "storm_ring"). Prefer localized item name if available.
+                let label = pieceId;
+                try {
+                    if (window.i18n) {
+                        const it = (typeof window.i18n.item === 'function') ? window.i18n.item(pieceId) : null;
+                        if (it && it.name) {
+                            label = it.name;
+                        } else if (typeof window.i18n.t === 'function') {
+                            const v = window.i18n.t(pieceId);
+                            if (typeof v === 'string') label = v;
+                        }
+                    }
+                } catch (e) { /* ignore */ }
+
+                return `<div class="set-piece"><span>${label}</span><span class="${ok ? 'ok' : 'no'}">${ok ? '✅' : '❌'}</span></div>`;
             }).join('');
 
-            const b2 = s.bonus2 ? s.bonus2.desc : '';
-            const b3 = s.bonus3 ? s.bonus3.desc : '';
+            const b2 = s.bonus2 ? (s.bonus2.descKey ? window.i18n.t(s.bonus2.descKey) : s.bonus2.desc) : '';
+            const b3 = s.bonus3 ? (s.bonus3.descKey ? window.i18n.t(s.bonus3.descKey) : s.bonus3.desc) : '';
+
+            const setName = s.nameKey ? window.i18n.t(s.nameKey) : (s.name || sid);
 
             const active2 = got >= 2;
             const active3 = got >= 3;
 
             cards.push(`
                 <div class="set-card">
-                    <div class="set-title"><strong>Set: ${s.name}</strong><span class="set-count">${got}/${total}</span></div>
+                    <div class="set-title"><strong>${window.i18n.t('codexSetLabel')} ${setName}</strong><span class="set-count">${got}/${total}</span></div>
                     <div class="set-pieces">${piecesHtml}</div>
                     <div class="set-bonuses">
-                        <div class="${active2 ? 'active' : ''}"><strong>Bonus 2 piezas:</strong> ${b2 || '—'}</div>
-                        <div class="${active3 ? 'active' : ''}"><strong>Bonus 3 piezas:</strong> ${b3 || '—'}</div>
+                        <div class="${active2 ? 'active' : ''}"><strong>${window.i18n.t('codexBonus2')}</strong> ${b2 || '—'}</div>
+                        <div class="${active3 ? 'active' : ''}"><strong>${window.i18n.t('codexBonus3')}</strong> ${b3 || '—'}</div>
                     </div>
                 </div>
             `);
         }
 
         if (!cards.length) {
-            root.innerHTML = `<div style="font-family:'Press Start 2P', monospace; font-size: 10px; color: #b0b0c0; line-height: 1.6;">Todavía no tenés sets. Buscá piezas en tiendas y cofres.</div>`;
+            root.innerHTML = `<div style="font-family:'Press Start 2P', monospace; font-size: 10px; color: #b0b0c0; line-height: 1.6;">${window.i18n.t('codexNoSets')}</div>`;
             return;
         }
 
         root.innerHTML = cards.join('');
     },
+// ===========================
+// SYNERGIES CODEX
+// ===========================
+renderSynergiesCodex() {
+    const root = document.getElementById('synergies-codex');
+    if (!root) return;
+
+    // Make it scrollable inside the codex panel
+    root.style.height = '100%';
+    root.style.overflow = 'auto';
+    root.style.paddingRight = '6px';
+
+    const db = window.SynergyDatabase;
+    if (!db) {
+        root.innerHTML = `<div style="font-family:'Press Start 2P', monospace; font-size: 10px; color: #b0b0c0; line-height: 1.6;">
+            ${window.i18n.t('codexSynergyDbMissing')}
+        </div>`;
+        return;
+    }
+
+    // Build a map of runeId -> rune data (icon/name) for nicer recipes
+    const runeMap = {};
+    try {
+        if (window.RuneDatabase) {
+            for (const k of Object.keys(RuneDatabase)) {
+                const arr = RuneDatabase[k];
+                if (!Array.isArray(arr)) continue;
+                for (const r of arr) {
+                    if (r && r.id) runeMap[r.id] = r;
+                }
+            }
+        }
+    } catch (e) { }
+
+    const fmt = (id) => {
+        const r = runeMap[id];
+        // Prefer rune translations (so we don't show raw ids like "blood_price")
+        const runeT = (window.i18n && typeof window.i18n.rune === 'function') ? window.i18n.rune(id) : null;
+        const itemT = (window.i18n && typeof window.i18n.item === 'function') ? window.i18n.item(id) : null;
+        const name = (runeT && runeT.name && runeT.name !== id) ? runeT.name
+                   : (itemT && itemT.name && itemT.name !== id) ? itemT.name
+                   : id;
+        const icon = r?.icon || '';
+        return `${icon ? icon + ' ' : ''}${name}`;
+    };
+
+    const checkHints = {
+        barrage: 'codexReq_barrage',
+        efficient_caster: 'codexReq_efficient_caster',
+        rapid_fire: 'codexReq_rapid_fire',
+        sniper_elite: 'codexReq_sniper_elite',
+        hypersonic: 'codexReq_hypersonic'
+    };
+
+    const synergies = Object.values(db || {}).slice().sort((a, b) => {
+        const an = (a?.name || '').toLowerCase();
+        const bn = (b?.name || '').toLowerCase();
+        return an.localeCompare(bn);
+    });
+
+    if (!synergies.length) {
+        root.innerHTML = `<div style="font-family:'Press Start 2P', monospace; font-size: 10px; color: #b0b0c0; line-height: 1.6;">
+            ${window.i18n.t('codexNoSynergies')}
+        </div>`;
+        return;
+    }
+
+    const esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+    const chip = (txt) => `<span class="syn-chip">${esc(txt)}</span>`;
+    const plus = () => `<span class="syn-plus">+</span>`;
+
+    const buildCombo = (ids) => {
+        const parts = ids.map(fmt);
+        // Chips with explicit + between them
+        let out = '';
+        for (let i = 0; i < parts.length; i++) {
+            if (i > 0) out += plus();
+            out += chip(parts[i]);
+        }
+        return `<div class="syn-chips">${out}</div>`;
+    };
+
+    const cards = synergies.map(s => {
+        let recipeHtml = '';
+        if (Array.isArray(s.requires)) {
+            recipeHtml = buildCombo(s.requires);
+        } else if (Array.isArray(s.requiresAny)) {
+            // One of the combos must be complete
+            recipeHtml = s.requiresAny.map((combo, idx) => {
+                const block = buildCombo(combo);
+                if (idx === 0) return `<div class="syn-combo">${block}</div>`;
+                return `<div class="syn-or">${esc(window.i18n.t('codexOr') || 'OR')}</div><div class="syn-combo">${block}</div>`;
+            }).join('');
+        } else if (typeof s.requiresCheck === 'function') {
+            const text = (checkHints[s.id] ? window.i18n.t(checkHints[s.id]) : null) || window.i18n.t('codexReq_special') || 'Special condition (auto-detected in run)';
+            recipeHtml = `<div class="syn-text">${esc(text)}</div>`;
+        } else {
+            recipeHtml = `<div class="syn-text">—</div>`;
+        }
+
+        const bonusText = (typeof s.getDesc === 'function' ? s.getDesc() : (window.i18n?.synergy?.(s.id)?.desc)) || s.desc || '—';
+        const bonusHtml = esc(bonusText).replace(/\n/g, '<br>');
+
+        const prettyName = ((typeof s.getName === 'function' ? s.getName() : (window.i18n?.synergy?.(s.id)?.name)) || s.name || s.id || '').toString()
+            .replace(/_/g,' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+
+        const reqLabel = (window.i18n.t('codexRequirement') || window.i18n.t('codexRequirementLabel') || 'Requirement');
+        const bonusLabel = (window.i18n.t('codexBonus') || window.i18n.t('codexBonusLabel') || 'Bonus');
+
+        return `
+            <div class="syn-row">
+                <div class="syn-left">
+                    <div class="syn-icon">⚡</div>
+                    <div class="syn-name">${esc(prettyName)}</div>
+                </div>
+                <div class="syn-right">
+                    <div class="syn-line">
+                        <div class="syn-label">${esc(reqLabel)}</div>
+                        <div class="syn-value">${recipeHtml}</div>
+                    </div>
+                    <div class="syn-line">
+                        <div class="syn-label">${esc(bonusLabel)}</div>
+                        <div class="syn-value">${bonusHtml}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+root.innerHTML = cards.join('');
+},
+
 
     // Returns true when a blocking overlay (draft/choice) is visible.
     // Used by Game loop to hard-freeze simulation so the player never gets hit while choosing UI.
@@ -3024,6 +3840,89 @@ screen.classList.remove('hidden');
             if (el && !el.classList.contains('hidden')) return true;
         }
         return false;
+    },
+
+    // ==========================================
+    // SYNERGY PANEL (Tecla B)
+    // ==========================================
+    drawSynergyPanel(ctx) {
+        if (!window.SynergySystem) return;
+        
+        const synergies = SynergySystem.getActiveSynergies();
+        
+        // Solo mostrar si: (hay sinergias Y panel visible) O (setting always visible)
+        if (synergies.length === 0 && !this.synergyAlwaysVisible) return;
+        if (synergies.length === 0 || (!this.synergyPanelVisible && !this.synergyAlwaysVisible)) return;
+        
+        const panelX = 10;
+        const panelY = Game.height - 200;
+        const panelW = 280;
+        const lineHeight = 16;
+        const panelH = Math.max(60, 40 + synergies.length * lineHeight);
+        
+        // Background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(panelX, panelY, panelW, panelH);
+        
+        // Border
+        ctx.strokeStyle = '#ff00ff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(panelX, panelY, panelW, panelH);
+        
+        // Title
+        ctx.fillStyle = '#ff00ff';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(`⚡ SINERGIAS ACTIVAS (${synergies.length})`, panelX + 10, panelY + 20);
+        
+        // Hint
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = '8px monospace';
+        ctx.fillText('Presioná B para ocultar', panelX + 10, panelY + 35);
+        
+        // Synergies list
+        ctx.font = '10px monospace';
+        let y = panelY + 50;
+        
+        if (synergies.length === 0) {
+            ctx.fillStyle = '#888888';
+            ctx.fillText('No hay sinergias activas', panelX + 10, y);
+        } else {
+            for (const synergy of synergies) {
+                ctx.fillStyle = '#ffff00';
+                ctx.fillText(`- ${synergy.name}`, panelX + 10, y);
+                
+                ctx.fillStyle = '#cccccc';
+                ctx.font = '8px monospace';
+                ctx.fillText(synergy.desc, panelX + 20, y + 10);
+                
+                ctx.font = '10px monospace';
+                y += lineHeight;
+            }
+        }
+    },
+
+    // ==========================================
+    // SEED PILL (HUD)
+    // ==========================================
+    drawSeedPill(ctx) {
+        if (!Game.seedText) return;
+        
+        const seedText = `Seed: ${Game.seedText}`;
+        ctx.font = '10px monospace';
+        const seedWidth = ctx.measureText(seedText).width + 16;
+        
+        // Pill background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(Game.width - seedWidth - 8, 8, seedWidth, 20);
+        
+        // Border
+        ctx.strokeStyle = '#ffaa00';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Game.width - seedWidth - 8, 8, seedWidth, 20);
+        
+        // Text
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillText(seedText, Game.width - seedWidth, 20);
     },
 
 };

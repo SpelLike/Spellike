@@ -1196,6 +1196,17 @@ const BossTypes = {
     }
 };
 
+// Localize boss display names via i18n (uses Codex lore tables).
+try {
+    if (window.i18n && typeof i18n.bossLore === 'function') {
+        Object.keys(BossTypes).forEach(id => {
+            const loc = i18n.bossLore(id);
+            if (loc && loc.name) BossTypes[id].name = loc.name;
+        });
+    }
+} catch (e) { }
+
+
 // Create a boss for a specific biome/level
 function createBoss(bossType, x, y, difficultyMult = 1, ngPlusLevel = 0) {
     return new Boss(x, y, bossType, difficultyMult, ngPlusLevel);

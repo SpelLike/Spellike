@@ -192,6 +192,11 @@ class Projectile extends Entity {
 
         const killed = target.takeDamage(finalDamage, knockbackAngle, knockbackForce);
 
+        // Show CRITIC! floating text if this was a critical hit
+        if (this.isCrit && window.FloatingTextSystem) {
+            FloatingTextSystem.critical(target.centerX, target.centerY - 10);
+        }
+
         // Elite mod: Reflect (returns a portion of damage to the player)
         if (this.owner === 'player' && target.reflectPct > 0 && Game.player) {
             const raw = Math.floor(finalDamage * target.reflectPct);
@@ -471,7 +476,14 @@ const ProjectileManager = {
                     }
                 }
             } else if (proj.owner === 'enemy') {
-                if (proj.collidesWith(player)) {
+                // Tight hurtbox so near-miss bullets feel fair.
+                const hb = {
+                    x: player.x + player.width * 0.28,
+                    y: player.y + player.height * 0.22,
+                    width: player.width * 0.44,
+                    height: player.height * 0.56
+                };
+                if (Utils.rectCollision(proj.bounds, hb)) {
                     player.takeDamage(proj.damage);
                     proj.active = false;
                 }

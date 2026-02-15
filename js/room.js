@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // ARCANE DEPTHS - Room System with DOOR
 // ==========================================
 
@@ -89,79 +89,6 @@ initDirector() {
     }
 }
 
-spawnEncounter(archetype, difficultyMult = 1, biomeEnemies = ['goblin'], biomeId = 'forest', opts = {}) {
-    const centerX = this.bounds.x + this.bounds.width / 2;
-    const centerY = this.bounds.y + this.bounds.height / 2;
-
-    const spawn = (type, dx, dy, overrides) => {
-        const x = Utils.clamp(centerX + dx, this.bounds.x + 60, this.bounds.x + this.bounds.width - 60);
-        const y = Utils.clamp(centerY + dy, this.bounds.y + 80, this.bounds.y + this.bounds.height - 60);
-        const enemy = createEnemy(type, x, y, difficultyMult, overrides || null);
-        if (opts.forceElite && enemy && !enemy.isBoss) {
-            enemy.isElite = true;
-            enemy.maxHp = Math.floor(enemy.maxHp * 1.8);
-            enemy.hp = enemy.maxHp;
-            enemy.damage = Math.floor(enemy.damage * 1.15);
-        }
-        this.enemies.push(enemy);
-        return enemy;
-    };
-
-    // Biome flavored base types
-    const biomeMap = {
-        forest: { tank: 'brute', healer: 'mage', sniper: 'archer', trapper: 'goblin', commander: 'wisp', charger: 'charger', swarm: 'slime' },
-        crypt:  { tank: 'brute', healer: 'mage', sniper: 'archer', trapper: 'skeleton', commander: 'wisp', charger: 'charger', swarm: 'skeleton' },
-        crystal:{ tank: 'brute', healer: 'mage', sniper: 'wisp',   trapper: 'goblin', commander: 'mage', charger: 'charger', swarm: 'slime' },
-        ruins:  { tank: 'brute', healer: 'mage', sniper: 'archer', trapper: 'turret', commander: 'wisp', charger: 'charger', swarm: 'goblin' },
-        swamp:  { tank: 'brute', healer: 'wisp', sniper: 'archer', trapper: 'goblin', commander: 'wisp', charger: 'charger', swarm: 'slime' },
-        inferno:{ tank: 'brute', healer: 'mage', sniper: 'wisp',   trapper: 'bomber', commander: 'mage', charger: 'charger', swarm: 'goblin' }
-    };
-    const b = biomeMap[biomeId] || biomeMap.forest;
-
-    // Clear any previous traps/lava zones
-    this.traps = [];
-    this.lavaPools = [];
-
-    switch (archetype) {
-        case 'bunker':
-            // 1 Tank + 1 Healer + 1 Sniper + 1 Trapper
-            spawn(b.tank,   -90,  10, { role: 'protector', hp: 70 });
-            spawn(b.healer, -20, -80, { role: 'healer', damage: 8 });
-            spawn(b.sniper,  95, -30, { role: 'sniper', behavior: 'ranged', attackCooldown: 2.0 });
-            spawn(b.trapper, 40,  80, { role: 'trapper', damage: 7 });
-            break;
-
-        case 'pursuit':
-            // 2 Charger + 1 Commander + 1 Wisp
-            spawn(b.charger, -90, 20, { behavior: 'charger', damage: 15 });
-            spawn(b.charger,  90, 20, { behavior: 'charger', damage: 15 });
-            spawn(b.commander, 0, -80, { role: 'commander', damage: 6 });
-            spawn('wisp', 0, 70, { behavior: 'ranged', damage: 10, attackCooldown: 1.6 });
-            break;
-
-        case 'swarm':
-            // 1 Summoner + 1 Protector + controlled mobs
-            spawn('summoner', 0, -60, { behavior: 'summoner', hp: 80 });
-            spawn(b.tank, -80, 0, { role: 'protector', hp: 85 });
-            const mobCount = Utils.random(3, 6);
-            for (let i = 0; i < mobCount; i++) {
-                spawn(b.swarm, Utils.random(-120, 120), Utils.random(40, 120), { behavior: 'chase', hp: 20 });
-            }
-            break;
-
-        case 'killbox':
-            // 2 Turrets + 1 Trapper + 1 Brute
-            spawn('turret', -120, -40, { behavior: 'ranged', speed: 0, attackCooldown: 1.2, hp: 60 });
-            spawn('turret',  120, -40, { behavior: 'ranged', speed: 0, attackCooldown: 1.2, hp: 60 });
-            spawn(b.trapper, 0, 80, { role: 'trapper', damage: 8 });
-            spawn(b.tank, 0, 0, { behavior: 'chase', hp: 95, damage: 14 });
-            break;
-
-        default:
-            // fallback: themed random
-            this.spawnEnemies(Utils.random(4, 7), difficultyMult, biomeEnemies);
-    }
-}
 
 addTrap(trap) {
     this.traps.push({ ...trap, t: 0, active: true });
@@ -378,24 +305,71 @@ isPlayerInAntiMagic(player) {
 
         this._eventSpawned = true;
 
-        const x = this.bounds.x + this.bounds.width / 2 - 18;
-        const y = this.bounds.y + this.bounds.height / 2 - 52;
+        // Keep events away from center chest/shop lanes.
+        const x = Utils.clamp(
+            this.bounds.x + 84,
+            this.bounds.x + 24,
+            this.bounds.x + this.bounds.width - 60
+        );
+        const y = Utils.clamp(
+            this.bounds.y + this.bounds.height / 2 - 28,
+            this.bounds.y + 72,
+            this.bounds.y + this.bounds.height - 88
+        );
+
+        const pool = ['shrine', 'shrine', 'campfire', 'campfire', 'pact'];
+        try { if (window.Game && Game.difficulty === 'demonic') pool.push('pact'); } catch (e) { }
+        const kind = Utils.randomChoice(pool);
 
         this.events.push({
-            kind: 'shrine',
+            kind,
             x, y, w: 36, h: 36,
             used: false
         });
+
+        // If a chest already exists (common room-clear flow), push it away from the event.
+        const chest = (this.chests || []).find(c => c && !c.opened);
+        if (chest) {
+            chest.x = Utils.clamp(
+                this.bounds.x + this.bounds.width * 0.68 - chest.width / 2,
+                this.bounds.x + 40,
+                this.bounds.x + this.bounds.width - chest.width - 40
+            );
+            chest.y = Utils.clamp(
+                this.bounds.y + this.bounds.height / 2 - 72,
+                this.bounds.y + 40,
+                this.bounds.y + this.bounds.height - chest.height - 60
+            );
+        }
     }
-    spawnChest(rarity = 'common') {
-        const x = this.bounds.x + this.bounds.width / 2 - 12;
+    spawnChest(rarity = 'common', chestIndex = 0) {
+        let x = this.bounds.x + this.bounds.width / 2 - 12;
+        if (this.events && this.events.some(ev => !ev.used)) {
+            x = Utils.clamp(
+                this.bounds.x + this.bounds.width * 0.68 - 12,
+                this.bounds.x + 40,
+                this.bounds.x + this.bounds.width - 52
+            );
+        }
         // Move chest a bit up so it doesn't overlap with shop terminals in mixed rooms
         const y = Utils.clamp(
             this.bounds.y + this.bounds.height / 2 - 70,
             this.bounds.y + 40,
             this.bounds.y + this.bounds.height - 60
         );
-        const chest = new Chest(x, y, rarity);
+        
+        // Generate deterministic loot seed
+        let lootSeed = null;
+        try {
+            if (window.Game && Game.seedText && Game.dungeon) {
+                const biomeIdx = window.BiomeOrder ? BiomeOrder.indexOf(Game.currentBiome) : 0;
+                const roomIdx = Game.dungeon.currentRoomIndex || 0;
+                const seedBase = `${Game.seedText}-${biomeIdx}-${roomIdx}-chest-${chestIndex}`;
+                lootSeed = seedBase;
+            }
+        } catch (e) { }
+        
+        const chest = new Chest(x, y, rarity, { lootSeed });
         this.chests.push(chest);
     }
 
@@ -465,7 +439,17 @@ isPlayerInAntiMagic(player) {
             offers[j] = t;
         }
 
-        this.shop.inventory = offers.slice(0, Math.max(3, Math.min(8, maxOffers))).concat(potions);
+        const totalSlots = Math.max(4, Math.min(8, maxOffers));
+        const maxPotionSlots = totalSlots <= 4 ? 1 : 2;
+        const chosenPotions = potions.slice(0, Math.min(maxPotionSlots, potions.length));
+        const offerSlots = Math.max(1, totalSlots - chosenPotions.length);
+
+        let finalInventory = offers.slice(0, offerSlots).concat(chosenPotions);
+        if (finalInventory.length < totalSlots) {
+            const missing = totalSlots - finalInventory.length;
+            finalInventory = finalInventory.concat(potions.slice(chosenPotions.length, chosenPotions.length + missing));
+        }
+        this.shop.inventory = finalInventory.slice(0, totalSlots);
     }
 
 
@@ -1169,6 +1153,13 @@ drawRoomModifiers(ctx, player) {
             }
         }
 
+        // Update chests (animations)
+        for (const chest of this.chests) {
+            if (chest && typeof chest.update === 'function') {
+                chest.update(dt);
+            }
+        }
+
         // Update negative room modifiers
         this.updateRoomModifiers(dt, player);
 
@@ -1295,50 +1286,109 @@ drawRoomModifiers(ctx, player) {
         if (!this.events || this.events.length === 0) return;
         const t = Date.now() / 1000;
 
+        const labelByKind = {
+            shrine: i18n.t('eventShrine'),
+            campfire: i18n.t('eventCampfire'),
+            pact: i18n.t('eventPact'),
+            forge: i18n.t('eventForge')
+        };
+        const colorByKind = {
+            shrine: '#b388ff',
+            campfire: '#ffb74d',
+            pact: '#ff6b6b',
+            forge: '#7db7ff'
+        };
+        const promptByKind = {
+            shrine: 'rgba(170, 255, 210, ALPHA)',
+            campfire: 'rgba(255, 220, 170, ALPHA)',
+            pact: 'rgba(255, 180, 180, ALPHA)',
+            forge: 'rgba(190, 230, 255, ALPHA)'
+        };
+
         for (const ev of this.events) {
+            const pulse = 0.5 + 0.5 * Math.sin(t * 4 + ev.x * 0.04);
+            const x = ev.x;
+            const y = ev.y;
+            const w = ev.w;
+            const h = ev.h;
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+            const frame = colorByKind[ev.kind] || '#9aa0a6';
+
+            ctx.save();
+
+            // Base shadow and pedestal.
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.fillRect(x + 2, y + h - 4, w, 6);
+
+            ctx.fillStyle = ev.used ? 'rgba(55, 55, 55, 0.78)' : 'rgba(22, 26, 34, 0.88)';
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = ev.used ? '#4b4b4b' : frame;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+
+            // Inner pattern by event type.
             if (ev.kind === 'shrine') {
-                const pulse = 0.5 + 0.5 * Math.sin(t * 4);
-                ctx.save();
-                ctx.fillStyle = ev.used ? 'rgba(80,80,80,0.6)' : 'rgba(120,0,255,0.35)';
-                ctx.fillRect(ev.x, ev.y, ev.w, ev.h);
-                ctx.strokeStyle = ev.used ? '#444' : '#b388ff';
+                ctx.strokeStyle = ev.used ? '#666' : '#d9c4ff';
                 ctx.lineWidth = 2;
-                ctx.strokeRect(ev.x, ev.y, ev.w, ev.h);
+                ctx.beginPath();
+                ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 7);
+                ctx.lineTo(cx + 7, cy);
+                ctx.lineTo(cx, cy + 7);
+                ctx.lineTo(cx - 7, cy);
+                ctx.closePath();
+                ctx.stroke();
+            } else if (ev.kind === 'campfire') {
+                ctx.strokeStyle = ev.used ? '#666' : '#e8c08a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx - 8, cy + 7);
+                ctx.lineTo(cx + 8, cy + 2);
+                ctx.moveTo(cx - 8, cy + 2);
+                ctx.lineTo(cx + 8, cy + 7);
+                ctx.stroke();
 
-                ctx.font = '16px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillStyle = ev.used ? '#777' : '#ffffff';
-                ctx.fillText('✦', ev.x + ev.w / 2, ev.y + 22);
-
-                if (!ev.used) {
-                    ctx.fillStyle = `rgba(68,255,136,${0.6 + pulse * 0.3})`;
-                    ctx.font = '10px monospace';
-                    ctx.fillText('[E] SANTUARIO', ev.x + ev.w / 2, ev.y - 6);
-                }
-                ctx.restore();
+                ctx.fillStyle = ev.used ? '#6f5a3d' : '#ff9f43';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 8);
+                ctx.lineTo(cx + 5, cy + 3);
+                ctx.lineTo(cx, cy + 1);
+                ctx.lineTo(cx - 5, cy + 3);
+                ctx.closePath();
+                ctx.fill();
+            } else if (ev.kind === 'pact') {
+                ctx.strokeStyle = ev.used ? '#666' : '#ff9a9a';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(cx - 6, cy - 9, 12, 18);
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 6);
+                ctx.lineTo(cx + 7, cy + 6);
+                ctx.lineTo(cx - 7, cy + 6);
+                ctx.closePath();
+                ctx.stroke();
+            } else if (ev.kind === 'forge') {
+                ctx.fillStyle = ev.used ? '#4b5a66' : '#22445e';
+                ctx.fillRect(cx - 9, cy - 8, 18, 12);
+                ctx.strokeStyle = ev.used ? '#6b6b6b' : '#9bd4ff';
+                ctx.strokeRect(cx - 9, cy - 8, 18, 12);
+                ctx.fillStyle = ev.used ? '#5f6f7a' : '#8de1ff';
+                ctx.fillRect(cx - 6, cy - 5, 12, 4);
             }
 
-if (ev.kind === 'forge') {
-    // Terminal body
-    ctx.save();
-    ctx.shadowColor = '#7db7ff';
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = '#0b1b2e';
-    ctx.strokeStyle = '#7db7ff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.rect(ev.x, ev.y, ev.w, ev.h);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#dff2ff';
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('🛠️', ev.x + ev.w/2, ev.y + 18);
-    ctx.font = '12px Arial';
-    ctx.fillText('[E] FORJA', ev.x + ev.w/2, ev.y - 6);
-    ctx.restore();
-}
+            // Prompt
+            if (!ev.used) {
+                const alpha = (0.55 + pulse * 0.35).toFixed(3);
+                const promptColor = (promptByKind[ev.kind] || 'rgba(210, 230, 255, ALPHA)').replace('ALPHA', alpha);
+                ctx.fillStyle = promptColor;
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`[E] ${labelByKind[ev.kind] || 'EVENTO'}`, cx, y - 7);
+            }
+
+            ctx.restore();
         }
     }
     drawShop(ctx) {
@@ -1365,12 +1415,13 @@ if (ev.kind === 'forge') {
         ctx.fillStyle = '#ffffff';
         ctx.font = '14px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(this.shop.theme === 'blackmarket' ? '☠️' : '🛒', x + w / 2, y + 20);
+        ctx.fillText(this.shop.theme === 'blackmarket' ? 'BM' : '$', x + w / 2, y + 20);
 
         // Interaction prompt
         ctx.fillStyle = '#44ff88';
         ctx.font = '10px monospace';
-        ctx.fillText(this.shop.theme === 'blackmarket' ? '[E] MERCADO NEGRO' : '[E] TIENDA', x + w / 2, y - 6);
+        const shopLabel = (window.i18n ? i18n.t(this.shop.theme === 'blackmarket' ? 'shopBlackmarket' : 'shopTitle') : (this.shop.theme === 'blackmarket' ? 'MERCADO NEGRO' : 'TIENDA'));
+        ctx.fillText(`[E] ${shopLabel}`, x + w / 2, y - 6);
         ctx.restore();
     }
 
@@ -1518,7 +1569,7 @@ if (ev.kind === 'forge') {
             ctx.fillStyle = '#44ff88';
             ctx.font = 'bold 10px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('[E] Avanzar', centerX, y + h + 16);
+            ctx.fillText((window.i18n ? i18n.t('promptAdvance') : '[E] Advance'), centerX, y + h + 16);
             ctx.shadowBlur = 0;
 
         } else {
@@ -1549,7 +1600,8 @@ if (ev.kind === 'forge') {
             ctx.fillStyle = '#ff4444';
             ctx.font = '8px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText(`🔒 ${remaining} enemigos`, x + w / 2, y + h + 14);
+            const remTxt = (window.i18n ? `💀 ${i18n.f('hudEnemiesRemaining', { n: remaining })}` : `💀 ${remaining} enemies`);
+            ctx.fillText(remTxt, x + w / 2, y + h + 14);
         }
     }
 
@@ -1571,7 +1623,8 @@ if (ev.kind === 'forge') {
         ctx.fillStyle = 'rgba(170, 220, 255, 0.95)';
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('[E] VOLVER', x + w / 2, y + h / 2 + 3);
+        const backLabel = (window.i18n ? i18n.t('btnBack') : 'VOLVER');
+        ctx.fillText(`[E] ${backLabel}`, x + w / 2, y + h / 2 + 3);
         ctx.restore();
     }
 
@@ -1605,9 +1658,19 @@ if (ev.kind === 'forge') {
                     return { type: 'event', event: 'shrine' };
                 }
 
+                if (ev.kind === 'campfire' && dist < 70) {
+                    ev.used = true;
+                    return { type: 'event', event: 'campfire' };
+                }
+
+                if (ev.kind === 'pact' && dist < 70) {
+                    ev.used = true;
+                    return { type: 'event', event: 'pact' };
+                }
+
                 if (ev.kind === 'forge' && dist < 80) {
                     AudioManager.play('menuClick');
-                    // Don't mark as used here—UI will handle final use. We mark on close/program.
+                    // Don't mark as used hereâ€”UI will handle final use. We mark on close/program.
                     return { type: 'forge', forge: ev };
                 }
             }
@@ -1627,7 +1690,7 @@ if (ev.kind === 'forge') {
         // Check chests
         for (const chest of this.chests) {
             if (!chest.opened && player.distanceTo(chest) < 50) {
-                const loot = chest.open();
+                const loot = chest.open(player);
                 if (loot) return { type: 'loot', item: loot };
             }
         }

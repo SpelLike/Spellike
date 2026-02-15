@@ -1270,8 +1270,8 @@ const EnemyTypes = {
 // ----------------------------------------------------------
 
 const BiomeVariantPool = {
-    forest:   [{ id: 'thorned',        name: 'Espinoso',    chance: 0.35, hpMult: 1.05, speedMult: 1.08 }],
-    crypt:    [{ id: 'haunted',        name: 'Maldito',     chance: 0.35, hpMult: 1.08 }],
+    forest:   [{ id: 'thorned',        name: 'Spiky',    chance: 0.35, hpMult: 1.05, speedMult: 1.08 }],
+    crypt:    [{ id: 'haunted',        name: 'Cursed',     chance: 0.35, hpMult: 1.08 }],
     crystal:  [{ id: 'crystal_shards', name: 'Cristalino',  chance: 0.35, dmgMult: 1.05 }],
     ruins:    [{ id: 'armored',        name: 'Blindado',    chance: 0.40, hpMult: 1.15, damageTakenMult: 0.85 }],
     swamp:    [{ id: 'toxic_burst',    name: 'Tóxico',      chance: 0.40, speedMult: 1.05 }],
@@ -1295,7 +1295,7 @@ function applyBiomeVariantToEnemy(enemy, biomeId) {
     if (Math.random() > p) return;
 
     enemy.variantId = variant.id;
-    enemy.variantName = variant.name;
+    enemy.variantName = (window.i18n && typeof i18n.mutation==='function') ? i18n.mutation(variant.id) : variant.name;
     enemy.variantTimer = 0.6 + Math.random() * 1.0;
 
     if (variant.hpMult) {

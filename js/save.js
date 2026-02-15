@@ -59,6 +59,7 @@ const SaveManager = {
     createSaveData(player, dungeon, biomeId, playTime) {
         return {
             slotId: UI.selectedSlot,
+            seedText: (window.Game ? Game.seedText : ''),
             biome: biomeId,
             biomeName: getBiome(biomeId).name,
             biomeNum: BiomeOrder.indexOf(biomeId) + 1,
@@ -75,6 +76,7 @@ const SaveManager = {
             modifiers: (window.Game ? Game.modifiers : null),
             blessings: (window.Game ? Game.blessings : null),
             curses: (window.Game ? Game.curses : null),
+            runObjectives: (window.Game && Array.isArray(Game.runObjectives)) ? JSON.parse(JSON.stringify(Game.runObjectives)) : [],
             level: Math.floor(player.stats.kills / 10) + 1,
             player: {
                 hp: player.hp,

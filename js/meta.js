@@ -6,27 +6,22 @@
     const META_KEY = 'arcane_depths_meta_v1';
 
     // Friendly names/descriptions for codex.
-    const EnemyLore = {
-        goblin: { name: 'Goblin', icon: '🟢', desc: 'Rápidos y molestos. Te presionan en grupo.' },
-        skeleton: { name: 'Esqueleto', icon: '💀', desc: 'Resistentes. Pegan más fuerte de lo que parece.' },
-        slime: { name: 'Slime', icon: '🟩', desc: 'Lentos pero persistentes. Controlan espacio.' },
-        archer: { name: 'Arquero', icon: '🏹', desc: 'Se mantiene lejos y te castiga si te quedás quieto.' },
-        charger: { name: 'Cargador', icon: '🐗', desc: 'Embiste con fuerza. Castiga errores y mala posición.' },
-        mage: { name: 'Mago', icon: '🧙', desc: 'Teleporta y dispara salvas. Prioridad alta.' },
-        bomber: { name: 'Bombardero', icon: '💥', desc: 'Si lo dejás llegar, explota. No lo subestimes.' },
-        summoner: { name: 'Invocador', icon: '🌀', desc: 'Crea aliados. Si lo ignorás, la sala se descontrola.' }
-    };
+    // Friendly names/descriptions for codex (localized via i18n).
+    const EnemyLore = new Proxy({}, {
+        get: (_, id) => {
+            try { return (window.i18n && typeof i18n.enemyLore === 'function') ? i18n.enemyLore(id) : { name: id, icon: '❓', desc: '' }; }
+            catch (e) { return { name: id, icon: '❓', desc: '' }; }
+        }
+    });
 
-    const BossLore = {
-        guardian: { name: 'El Guardián', icon: '🗿', desc: 'Prueba de fuerza. Alterna presión melee y ranged.' },
-        demon_lord: { name: 'Señor Demonio', icon: '😈', desc: 'Agresivo y caótico. Controla el combate.' },
-        skeleton_king: { name: 'Rey Esqueleto', icon: '👑', desc: 'Convoca esbirros. Mantener el ritmo es clave.' },
-        spider_queen: { name: 'Reina Araña', icon: '🕷️', desc: 'Velocidad y patrones. Castiga la falta de movilidad.' },
-        golem: { name: 'Gólem Antiguo', icon: '🪨', desc: 'Tanque brutal. Leer telegraphs te salva.' },
-        hydra: { name: 'Hidra', icon: '🐍', desc: 'Ataques en ráfaga. No te quedes encerrado.' },
-        fire_lord: { name: 'Señor del Fuego', icon: '🔥', desc: 'Fuego por todos lados. Manejá el espacio.' },
-        final_boss: { name: 'EL CATACLISMO', icon: '🌌', desc: 'El final… y el inicio del NG+. Fases y patrones letales.' }
-    };
+
+    const BossLore = new Proxy({}, {
+        get: (_, id) => {
+            try { return (window.i18n && typeof i18n.bossLore === 'function') ? i18n.bossLore(id) : { name: id, icon: '❓', desc: '' }; }
+            catch (e) { return { name: id, icon: '❓', desc: '' }; }
+        }
+    });
+
 
     // Achievement database.
     const AchievementDB = [
@@ -127,7 +122,10 @@
                     shop_slots: 1,   // lvl 1..5 => slots = 3 + lvl (4..8)
                     shop_rerolls: 1, // lvl 1..4 => rerolls = lvl (1..4)
                     luck: 1,         // lvl 1..4 => luckPct = lvl*5% (5..20)
-                    dash: 1          // lvl 1..3 => dashCharges = lvl (1..3)
+                    dash: 1,         // lvl 1..3 => dashCharges = lvl (1..3)
+                    start_gold: 1,   // lvl 1..4 => +0..150 oro inicial
+                    vitality: 1,     // lvl 1..4 => +0..15 HP max
+                    potion_belt: 1   // lvl 1..3 => +0..2 pociones iniciales
                 };
             }
             this.data.stats = this.data.stats || {
@@ -157,6 +155,9 @@
             if (u.shop_rerolls === undefined) u.shop_rerolls = 1;
             if (u.luck === undefined) u.luck = 1;
             if (u.dash === undefined) u.dash = 1;
+            if (u.start_gold === undefined) u.start_gold = 1;
+            if (u.vitality === undefined) u.vitality = 1;
+            if (u.potion_belt === undefined) u.potion_belt = 1;
             if (this.data.essence === undefined) this.data.essence = 0;
             this.save();
         },
@@ -183,6 +184,9 @@
             if (key === 'shop_rerolls') return 4;
             if (key === 'luck') return 4;
             if (key === 'dash') return 3;
+            if (key === 'start_gold') return 4;
+            if (key === 'vitality') return 4;
+            if (key === 'potion_belt') return 3;
             return 1;
         },
 
@@ -193,6 +197,9 @@
             if (key === 'shop_rerolls') return 4 + (lvl - 1) * 3;    // 4,7,10
             if (key === 'luck') return 5 + (lvl - 1) * 4;           // 5,9,13
             if (key === 'dash') return 6 + (lvl - 1) * 5;           // 6,11
+            if (key === 'start_gold') return 3 + (lvl - 1) * 2;     // 3,5,7
+            if (key === 'vitality') return 4 + (lvl - 1) * 2;       // 4,6,8
+            if (key === 'potion_belt') return 4 + (lvl - 1) * 3;    // 4,7
             return 999;
         },
 
@@ -349,6 +356,18 @@
             const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('dash'), 1, 3) : clamp(this.getUpgradeLevel('dash'), 1, 3));
             return lvl; // 1..3
         },
+        getStartGold() {
+            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('start_gold'), 1, 4) : clamp(this.getUpgradeLevel('start_gold'), 1, 4));
+            return Math.max(0, (lvl - 1) * 50);
+        },
+        getMaxHpBonus() {
+            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('vitality'), 1, 4) : clamp(this.getUpgradeLevel('vitality'), 1, 4));
+            return Math.max(0, (lvl - 1) * 5);
+        },
+        getStartPotions() {
+            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('potion_belt'), 1, 3) : clamp(this.getUpgradeLevel('potion_belt'), 1, 3));
+            return Math.max(0, (lvl - 1) * 1);
+        },
 
         // Pricing (increases per level)
         getUpgradeMaxLevel(key) {
@@ -356,6 +375,9 @@
             if (key === 'shop_rerolls') return 4;
             if (key === 'luck') return 4;
             if (key === 'dash') return 3;
+            if (key === 'start_gold') return 4;
+            if (key === 'vitality') return 4;
+            if (key === 'potion_belt') return 3;
             return 1;
         },
 
@@ -367,7 +389,10 @@
                 shop_slots: 4,
                 shop_rerolls: 3,
                 luck: 5,
-                dash: 6
+                dash: 6,
+                start_gold: 3,
+                vitality: 4,
+                potion_belt: 4
             };
             const b = base[key] || 5;
             // Cost curve: b * (next-1) with a small ramp
@@ -437,7 +462,7 @@
             try {
                 if (window.UI && typeof UI.toastAchievement === 'function') {
                     const a = AchievementDB.find(x => x.id === id);
-                    if (a) UI.toastAchievement(a);
+                    if (a) { const loc = (window.i18n && typeof i18n.objective === 'function') ? i18n.objective(id) : {}; UI.toastAchievement(Object.assign({}, a, loc)); }
                 }
             } catch (e) { }
             return true;

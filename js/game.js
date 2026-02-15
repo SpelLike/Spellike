@@ -15,6 +15,9 @@ const Game = {
     lastTime: 0,
     playTime: 0,
 
+    // Seed system for reproducible runs
+    seedText: '',
+    
     player: null,
     dungeon: null,
     currentBiome: 'forest',
@@ -37,6 +40,7 @@ const Game = {
     // Meta-points tracking for permanent upgrades (v0.1.2)
     bossKillsTotalRun: 0,
     ngTransitionsThisRun: 0,
+    runObjectives: [],
 
     // Global run modifiers (blessings/curses/mutations)
     modifiers: {
@@ -93,7 +97,7 @@ const Game = {
         this.canvasRect = this.canvas.getBoundingClientRect();
     },
 
-    newGame(slotId, difficulty, eventsEnabled = true) {
+    newGame(slotId, difficulty, eventsEnabled = true, seedText = '') {
         // Enforce difficulty unlock gates:
         // - DIFÍCIL requires defeating 1 boss in NORMAL
         // - DEMENCIAL requires defeating 1 boss in DIFÍCIL
@@ -110,6 +114,7 @@ const Game = {
 
         this.difficulty = diff;
         this.eventsEnabled = (eventsEnabled !== false);
+        this.seedText = seedText || this.generateRandomSeed();
         this.currentBiome = 'forest';
         this.playTime = 0;
         this.ngPlusLevel = 0;
@@ -127,10 +132,14 @@ const Game = {
         this.forgePity = 0;
 
         this.player = new Player(this.width / 2 - 16, this.height - 100);
-        this.dungeon = new Dungeon(this.currentBiome, this.difficulty, this.ngPlusLevel);
+        this.dungeon = new Dungeon(this.currentBiome, this.difficulty, this.ngPlusLevel, this.seedText);
+        this.applyMetaUpgrades();
+        this.initRunObjectives(true);
         // Clear transient systems (prevents projectiles/particles carrying across runs)
         ProjectileManager.clear();
         ParticleSystem.clear();
+        FloatingTextSystem.clear();
+        SynergySystem.clear();
 
 
         // Player starts with NO runes
@@ -143,6 +152,34 @@ const Game = {
 
         // Apply per-room difficulty/events
         this.onEnterRoom(this.dungeon.getCurrentRoom());
+    },
+
+    generateRandomSeed() {
+        // Generate a readable seed (8 character alphanumeric)
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No confusing chars (0O, 1I)
+        let seed = '';
+        for (let i = 0; i < 8; i++) {
+            seed += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return seed;
+    },
+
+    copySeedToClipboard() {
+        if (!this.seedText) return;
+        
+        try {
+            navigator.clipboard.writeText(this.seedText).then(() => {
+                if (window.UI && typeof UI.showToast === 'function') {
+                    UI.showToast('📋 Seed copiada: ' + this.seedText);
+                }
+            });
+        } catch (e) {
+            // Fallback
+            console.log('Seed:', this.seedText);
+            if (window.UI && typeof UI.showToast === 'function') {
+                UI.showToast('Seed: ' + this.seedText);
+            }
+        }
     },
 
     loadFromSave(saveData) {
@@ -160,6 +197,7 @@ const Game = {
         } catch (e) { /* ignore */ }
         this.difficulty = diff;
         this.eventsEnabled = (saveData && typeof saveData.eventsEnabled === 'boolean') ? saveData.eventsEnabled : true;
+        this.seedText = saveData.seedText || this.generateRandomSeed();
         this.currentBiome = saveData.biome;
         this.playTime = saveData.playTime || 0;
         this.ngPlusLevel = saveData.ngPlusLevel || 0;
@@ -176,10 +214,16 @@ const Game = {
         this.player = new Player(this.width / 2 - 16, this.height - 100);
         SaveManager.applyLoadedData(this.player, saveData);
 
-        this.dungeon = new Dungeon(this.currentBiome, this.difficulty, this.ngPlusLevel);
+        this.dungeon = new Dungeon(this.currentBiome, this.difficulty, this.ngPlusLevel, this.seedText);
         // Clear transient systems after loading
         ProjectileManager.clear();
         ParticleSystem.clear();
+        FloatingTextSystem.clear();
+        SynergySystem.clear();
+
+        this.runObjectives = Array.isArray(saveData.runObjectives) ? saveData.runObjectives : [];
+        if (!this.runObjectives.length) this.initRunObjectives(true);
+        else this.hydrateRunObjectives();
 
         // Dungeon.currentRoomIndex is a getter (derived from history). Use helper.
         if (this.dungeon && typeof this.dungeon.setRoomIndex === 'function') {
@@ -205,7 +249,8 @@ const Game = {
             stats: { ...this.player.stats },
             runes: this.player.runes.map(r => r ? { ...r } : null),
             perks: this.player.perks.map(p => ({ ...p })),
-            playTime: this.playTime
+            playTime: this.playTime,
+            objectives: JSON.parse(JSON.stringify(this.runObjectives || []))
         };
     },
 
@@ -221,17 +266,25 @@ const Game = {
         this.player.runes = this.roomEntryState.runes.map(r => r ? { ...r } : null);
         this.player.perks = this.roomEntryState.perks.map(p => ({ ...p }));
         this.playTime = this.roomEntryState.playTime;
+        this.runObjectives = this.roomEntryState.objectives ? JSON.parse(JSON.stringify(this.roomEntryState.objectives)) : (this.runObjectives || []);
+        this.hydrateRunObjectives();
     },
 
 
     rollBiomeMutation(forceId = null) {
         const pool = [
-            { id: 'stable', name: 'Estable', desc: 'Sin cambios raros.', enemyStatMult: 1, enemySpeedMult: 1 },
-            { id: 'brutal', name: 'Brutal', desc: 'Enemigos +20% HP/Daño.', enemyStatMult: 1.2, enemySpeedMult: 1 },
-            { id: 'haste', name: 'Acelerado', desc: 'Enemigos +25% velocidad.', enemyStatMult: 1, enemySpeedMult: 1.25 },
-            { id: 'swarm', name: 'Enjambre', desc: '+35% cantidad de enemigos.', enemyStatMult: 1, enemySpeedMult: 1, enemyCountMult: 1.35 },
-            { id: 'volatile', name: 'Volátil', desc: 'Enemigos explotan al morir.', enemyStatMult: 1.05, enemySpeedMult: 1, enemyExplodeOnDeath: true }
+            { id: 'stable', enemyStatMult: 1, enemySpeedMult: 1 },
+            { id: 'brutal', enemyStatMult: 1.2, enemySpeedMult: 1 },
+            { id: 'haste', enemyStatMult: 1, enemySpeedMult: 1.25 },
+            { id: 'swarm', enemyStatMult: 1, enemySpeedMult: 1, enemyCountMult: 1.35 },
+            { id: 'volatile', enemyStatMult: 1.05, enemySpeedMult: 1, enemyExplodeOnDeath: true }
         ];
+
+        // Localize name/desc via i18n
+        pool.forEach(p => {
+            const loc = (window.i18n && typeof i18n.mutator === 'function') ? i18n.mutator(p.id) : null;
+            if (loc) { p.name = loc.name; p.desc = loc.desc; }
+        });
 
         const chosen = forceId ? pool.find(p => p.id === forceId) : Utils.randomChoice(pool);
         this.biomeMutation = { ...chosen };
@@ -241,6 +294,170 @@ const Game = {
 
         // Mutation baseline for HP/DMG is provided through Dungeon.getDifficultyMult via biomeMutation.enemyStatMult
         return this.biomeMutation;
+    },
+
+    // =========================
+    // RUN OBJECTIVES (Mini-metas)
+    // =========================
+    applyMetaUpgrades() {
+        if (!this.player) return;
+        try {
+            if (window.Meta) {
+                const hpBonus = (typeof Meta.getMaxHpBonus === 'function') ? Meta.getMaxHpBonus() : 0;
+                if (hpBonus > 0) {
+                    this.player.maxHp += hpBonus;
+                    this.player.hp += hpBonus;
+                }
+                const startGold = (typeof Meta.getStartGold === 'function') ? Meta.getStartGold() : 0;
+                if (startGold > 0) {
+                    this.player.gold += startGold;
+                }
+                const startPotions = (typeof Meta.getStartPotions === 'function') ? Meta.getStartPotions() : 0;
+                if (startPotions > 0) {
+                    this.player.potions = Math.min(10, this.player.potions + startPotions);
+                }
+            }
+        } catch (e) { }
+    },
+
+    initRunObjectives(force = false) {
+        if (!force && this.runObjectives && this.runObjectives.length) return;
+        const pool = ['kills', 'rooms', 'gold', 'time'];
+        const picks = Utils.shuffle(pool).slice(0, 3);
+        this.runObjectives = picks.map(id => this.buildObjective(id));
+    },
+
+    getObjectiveTarget(id) {
+        const diff = this.difficulty || 'normal';
+        const diffMult = (diff === 'hard') ? 1.2 : (diff === 'demonic') ? 1.4 : 1.0;
+        const ngMult = 1 + (this.ngPlusLevel || 0) * 0.15;
+        const mult = diffMult * ngMult;
+
+        switch (id) {
+            case 'kills':
+                return Math.max(15, Math.round(25 * mult));
+            case 'rooms':
+                return Math.max(2, Math.round(3 * mult));
+            case 'gold':
+                return Math.max(200, Math.round(300 * mult));
+            case 'time': {
+                const sec = Math.max(90, Math.round(180 * mult / 30) * 30);
+                return sec;
+            }
+            default:
+                return 1;
+        }
+    },
+
+    getObjectiveDefinition(id, target) {
+        const es = (window.i18n && i18n.getCurrentLang) ? (i18n.getCurrentLang() === 'es') : true;
+        switch (id) {
+            case 'kills':
+                return { 
+                    name: es ? 'Cazador' : 'Hunter',
+                    desc: es ? `Mata ${target} enemigos` : `Kill ${target} enemies`,
+                    reward: { type: 'gold', amount: 150, text: es ? '+150 oro' : '+150 gold' }
+                };
+            case 'rooms':
+                return {
+                    name: es ? 'Explorador' : 'Explorer',
+                    desc: es ? `Limpia ${target} salas` : `Clear ${target} rooms`,
+                    reward: { type: 'potion', amount: 1, text: es ? '+1 poción' : '+1 potion' }
+                };
+            case 'gold':
+                return {
+                    name: es ? 'Recaudador' : 'Collector',
+                    desc: es ? `Reúne ${target} oro` : `Collect ${target} gold`,
+                    reward: { type: 'healPercent', amount: 25, text: es ? 'Cura 25% HP' : 'Heal 25% HP' }
+                };
+            case 'survive':
+                return {
+                    name: es ? 'Resistencia' : 'Endurance',
+                    desc: es ? `Sobrevive ${Utils.formatTime(target)}` : `Survive ${Utils.formatTime(target)}`,
+                    reward: { type: 'damage', amount: 4, text: es ? '+4 daño' : '+4 damage' }
+                };
+        }
+        return { name: id, desc: '', reward: { type: 'gold', amount: 0, text: '' } };
+    },
+
+    buildObjective(id) {
+        const target = this.getObjectiveTarget(id);
+        const def = this.getObjectiveDefinition(id, target);
+        return { id, target, name: def.name, desc: def.desc, reward: def.reward, completed: false, claimed: false };
+    },
+
+    hydrateRunObjectives() {
+        if (!Array.isArray(this.runObjectives)) this.runObjectives = [];
+        this.runObjectives = this.runObjectives.map(o => {
+            const id = (o && o.id) ? o.id : 'kills';
+            const target = (o && typeof o.target === 'number') ? o.target : this.getObjectiveTarget(id);
+            const def = this.getObjectiveDefinition(id, target);
+            return {
+                id,
+                target,
+                name: (o && o.name) ? o.name : def.name,
+                desc: (o && o.desc) ? o.desc : def.desc,
+                reward: (o && o.reward) ? o.reward : def.reward,
+                completed: !!(o && o.completed),
+                claimed: !!(o && o.claimed)
+            };
+        });
+    },
+
+    getObjectiveProgress(obj) {
+        if (!obj || !this.player) return 0;
+        switch (obj.id) {
+            case 'kills': return this.player.stats.kills || 0;
+            case 'rooms': return this.player.stats.roomsCleared || 0;
+            case 'gold': return this.player.gold || 0;
+            case 'time': return this.playTime || 0;
+            default: return 0;
+        }
+    },
+
+    updateObjectives() {
+        if (!this.runObjectives || !this.runObjectives.length || !this.player) return;
+        for (const obj of this.runObjectives) {
+            if (!obj) continue;
+            if (obj.completed) {
+                if (!obj.claimed) this.grantObjectiveReward(obj);
+                continue;
+            }
+            const cur = this.getObjectiveProgress(obj);
+            if (cur >= obj.target) {
+                obj.completed = true;
+                this.grantObjectiveReward(obj);
+            }
+        }
+    },
+
+    grantObjectiveReward(obj) {
+        if (!obj || obj.claimed || !this.player) return;
+        obj.claimed = true;
+        const r = obj.reward || {};
+        const p = this.player;
+
+        switch (r.type) {
+            case 'gold':
+                if (typeof p.addGold === 'function') p.addGold(r.amount || 0);
+                else p.gold += (r.amount || 0);
+                break;
+            case 'potion':
+                p.potions = Math.min(10, p.potions + (r.amount || 1));
+                break;
+            case 'heal_pct':
+                p.heal(Math.floor(p.maxHp * (r.amount || 0)));
+                break;
+            case 'damage':
+                p.damage += (r.amount || 0);
+                break;
+        }
+
+        try {
+            if (window.UI && typeof UI.toastMessage === 'function') {
+                UI.toastMessage(`OK ${obj.name}: ${r.text || 'Recompensa'}`);
+            }
+        } catch (e) { }
     },
 
 
@@ -505,6 +722,22 @@ const Game = {
         ProjectileManager.update(dt, this.player, room.getActiveEnemies(), room);
 
         ParticleSystem.update(dt);
+        FloatingTextSystem.update(dt);
+        
+        // Update synergies when runes change
+        const newSynergies = SynergySystem.detectSynergies(this.player);
+        if (newSynergies.length > 0) {
+            SynergySystem.showNewSynergies(this.player);
+            try {
+                if (window.UI && !UI.synergyAlwaysVisible) {
+                    UI.synergyPanelVisible = true; // auto-open on activation (Mode B)
+                }
+            } catch (e) { }
+
+        }
+        SynergySystem.applyBonuses(this.player);
+        
+        this.updateObjectives();
 
         // Relics (NG-only)
         this.tickRelics(dt, room);
@@ -532,6 +765,10 @@ const Game = {
                 } else if (result.type === 'event') {
                     if (result.event === 'shrine') {
                         UI.showShrineChoice();
+                    } else if (result.event === 'campfire') {
+                        UI.showCampfireChoice();
+                    } else if (result.event === 'pact') {
+                        UI.showPactChoice();
                     }
                 }
             }
@@ -571,6 +808,7 @@ const Game = {
         ProjectileManager.draw(this.ctx);
 
         ParticleSystem.draw(this.ctx);
+        FloatingTextSystem.draw(this.ctx);
 
         // Boss HUD
         try { this.drawBossHud(this.ctx, room); } catch (e) { }
@@ -872,10 +1110,14 @@ const Game = {
     // NEW: Loot with choice (rune vs item)
 
     handleLootWithChoice(chestLoot) {
-        // chestLoot can be a string rarity or an object descriptor
+        // chestLoot can be a string rarity, or an object with {rarity, lootSeed, ...}
         const rarity = typeof chestLoot === 'string' ? chestLoot : (chestLoot?.rarity || 'common');
         const forceLegendary = !!(typeof chestLoot === 'object' && chestLoot?.forceLegendary);
         const bossChest = !!(typeof chestLoot === 'object' && chestLoot?.bossChest);
+        const lootSeed = (typeof chestLoot === 'object' && chestLoot?.lootSeed) ? chestLoot.lootSeed : null;
+
+        // Create seeded RNG if we have a loot seed
+        const rng = lootSeed ? Utils.createSeededRNG(lootSeed) : null;
 
         // Demencial: chance to drop an Empty Rune (with pity)
         let empty = null;
@@ -896,9 +1138,49 @@ const Game = {
 
         const tunedRarity = demencial ? upgradeRarity(rarity) : (diff === 'hard' ? upgradeRarity(rarity) : rarity);
 
-        const runeOption = empty ? empty : (forceLegendary ? getRandomRune('legendary') : getWeightedRandomRune(tunedRarity));
-        const itemOption = forceLegendary ? ItemDatabase.getRandomItem('legendary') : ItemDatabase.getRandomItem(tunedRarity);
+        // Use seeded RNG for rune/item selection if available
+        let runeOption, itemOption;
+        
+        if (rng) {
+            // Deterministic loot
+            runeOption = empty ? empty : (forceLegendary ? getRandomRuneSeeded('legendary', rng) : getWeightedRandomRuneSeeded(tunedRarity, rng));
+            itemOption = forceLegendary ? ItemDatabase.getRandomItemSeeded('legendary', rng) : ItemDatabase.getRandomItemSeeded(tunedRarity, rng);
+        } else {
+            // Non-deterministic (fallback)
+            runeOption = empty ? empty : (forceLegendary ? getRandomRune('legendary') : getWeightedRandomRune(tunedRarity));
+            itemOption = forceLegendary ? ItemDatabase.getRandomItem('legendary') : ItemDatabase.getRandomItem(tunedRarity);
+        }
 
+
+        // Cap filters: avoid offering upgrades that are already maxed (fire rate cap x2, Void Touch max 2)
+        const playerRef = this.player;
+        const pickValidRune = (rar, attempts = 20) => {
+            for (let i = 0; i < attempts; i++) {
+                const r = rng
+                    ? (forceLegendary ? getRandomRuneSeeded('legendary', rng) : getWeightedRandomRuneSeeded(rar, rng))
+                    : (forceLegendary ? getRandomRune('legendary') : getWeightedRandomRune(rar));
+                if (!r) continue;
+                if (!Utils.shouldExcludeRune(r, playerRef)) return r;
+            }
+            return null;
+        };
+        const pickValidItem = (rar, attempts = 20) => {
+            for (let i = 0; i < attempts; i++) {
+                const it = rng
+                    ? (forceLegendary ? ItemDatabase.getRandomItemSeeded('legendary', rng) : ItemDatabase.getRandomItemSeeded(rar, rng))
+                    : (forceLegendary ? ItemDatabase.getRandomItem('legendary') : ItemDatabase.getRandomItem(rar));
+                if (!it) continue;
+                if (!Utils.shouldExcludeItem(it, playerRef)) return it;
+            }
+            return null;
+        };
+
+        if (runeOption && Utils.shouldExcludeRune(runeOption, playerRef)) {
+            runeOption = pickValidRune(tunedRarity);
+        }
+        if (itemOption && Utils.shouldExcludeItem(itemOption, playerRef)) {
+            itemOption = pickValidItem(tunedRarity);
+        }
         if (runeOption && itemOption) {
             UI.showLootChoice(runeOption, itemOption);
         } else if (runeOption) {
@@ -1010,6 +1292,7 @@ const Game = {
         if (!item) return;
 
         let appliedSomething = false;
+        const isSetPiece = !!(item && item.setId);
 
         // Healing
         if (item.heal && item.heal > 0) {
@@ -1136,10 +1419,25 @@ const Game = {
             appliedSomething = true;
         }
 
+        // Set pieces may have no direct stats (bonuses come from the set itself).
+        // Still, we must record the piece and trigger set bonus evaluation.
+        if (isSetPiece) {
+            this.player.addPassiveItem(item);
+            appliedSomething = true;
+        }
+
         if (appliedSomething) {
             // Apply set thresholds (2/3, 3/3)
             try { this.applySetBonuses(); } catch (e) { }
             AudioManager.play('pickup');
+        }
+
+        // Set pieces can be "statless" (their power comes from the set bonuses).
+        // Ensure they are tracked and trigger set bonus evaluation.
+        if (!appliedSomething && isSetPiece) {
+            this.player.addPassiveItem(item);
+            try { this.applySetBonuses(); } catch (e) { }
+            try { AudioManager.play('pickup'); } catch (e) { }
         }
     },
 
@@ -1374,17 +1672,25 @@ const Game = {
 
         // Pact choice: 1 blessing + 1 curse per loop
         const blessings = [
-            { id: 'power', name: 'Poder', desc: '+18% daño' },
-            { id: 'swift', name: 'Celeridad', desc: '+8% velocidad' },
-            { id: 'sustain', name: 'Vitalidad', desc: '+20 HP Máx.' },
-            { id: 'rich', name: 'Oro Fácil', desc: '+120 oro inmediato' }
+            { id: 'power' },
+            { id: 'swift' },
+            { id: 'sustain' },
+            { id: 'rich' }
         ];
+        blessings.forEach(b => {
+            const loc = (window.i18n && typeof i18n.blessing === 'function') ? i18n.blessing(b.id) : null;
+            if (loc) { b.name = loc.name; b.desc = loc.desc; }
+        });
         const curses = [
-            { id: 'fragile', name: 'Frágil', desc: '-10% HP máximo' },
-            { id: 'wrath', name: 'Ira', desc: 'Enemigos +20% HP/Daño' },
-            { id: 'swarm', name: 'Enjambre', desc: '+25% enemigos por sala' },
-            { id: 'sniper', name: 'Balística', desc: 'Proyectiles enemigos +25% velocidad' }
+            { id: 'fragile' },
+            { id: 'wrath' },
+            { id: 'swarm' },
+            { id: 'sniper' }
         ];
+        curses.forEach(c => {
+            const loc = (window.i18n && typeof i18n.curse === 'function') ? i18n.curse(c.id) : null;
+            if (loc) { c.name = loc.name; c.desc = loc.desc; }
+        });
 
         this.paused = true;
         UI.showNgPlusPactChoice(blessings, curses, (b, c) => {

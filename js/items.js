@@ -12,11 +12,20 @@ const ItemRarity = {
 class Item {
     constructor(config) {
         this.id = config.id;
-        this.name = config.name;
         this.icon = config.icon || '📦';
-        this.desc = config.desc || '';
         this.type = config.type || 'item';
         this.rarity = config.rarity || 'common';
+
+        // Translation system
+        if (window.i18n) {
+            const trans = window.i18n.item(this.id);
+            this.name = trans.name;
+            this.desc = trans.desc;
+        } else {
+            // Fallback if translation system not loaded
+            this.name = config.name || this.id;
+            this.desc = config.desc || '';
+        }
 
         // Effects
         this.heal = config.heal || 0;
@@ -54,6 +63,14 @@ class Chest {
         this.opened = false;
         this.sprite = Sprites.getChest(rarity);
 
+        // Loot seed for deterministic loot
+        this.lootSeed = options.lootSeed || null;
+        
+        // Animation
+        this.bobOffset = Math.random() * Math.PI * 2;
+        this.glowPhase = Math.random() * Math.PI * 2;
+        this.openAnimation = 0; // 0 to 1
+        
         // Optional behavior hooks
         this.forceLegendary = !!options.forceLegendary;
         this.isBossChest = !!options.isBossChest;
@@ -63,37 +80,117 @@ class Chest {
     get centerX() { return this.x + this.width / 2; }
     get centerY() { return this.y + this.height / 2; }
 
-    open() {
+    open(player) {
         if (this.opened) return null;
         this.opened = true;
         AudioManager.play('chest');
+
+        // Open animation
+        this.openAnimation = 0;
+        
+        // Bonus based on rarity
+        const bonuses = {
+            common: { gold: 10, mana: 2 },
+            rare: { gold: 25, mana: 4 },
+            epic: { gold: 50, mana: 6 },
+            legendary: { gold: 100, mana: 10 }
+        };
+        
+        const bonus = bonuses[this.rarity] || bonuses.common;
+        
+        // Give bonuses
+        if (player && bonus.gold > 0) {
+            player.gold += bonus.gold;
+            if (window.FloatingTextSystem) {
+                FloatingTextSystem.gold(this.centerX, this.centerY - 20, bonus.gold);
+            }
+        }
+        if (player && bonus.mana > 0) {
+            player.mana = Math.min(player.maxMana, player.mana + bonus.mana);
+            if (window.FloatingTextSystem) {
+                FloatingTextSystem.mana(this.centerX, this.centerY - 10, bonus.mana);
+            }
+        }
+        
+        // Particles
+        if (window.ParticleSystem) {
+            ParticleSystem.burst(this.centerX, this.centerY, 15, {
+                color: '#ffd700',
+                life: 0.8,
+                size: 4,
+                speed: 3
+            });
+            ParticleSystem.burst(this.centerX, this.centerY, 10, {
+                color: '#00d4ff',
+                life: 0.6,
+                size: 3,
+                speed: 2
+            });
+        }
 
         if (this.onOpen) {
             try { this.onOpen(); } catch (e) { /* ignore */ }
         }
 
-        // Backwards compatible:
-        // - Normal chests return a string rarity
-        // - Boss chests can return a richer descriptor
+        // Return loot descriptor with seed
         if (this.isBossChest || this.forceLegendary) {
-            return { rarity: this.rarity, forceLegendary: this.forceLegendary, bossChest: this.isBossChest };
+            return { 
+                rarity: this.rarity, 
+                forceLegendary: this.forceLegendary, 
+                bossChest: this.isBossChest,
+                lootSeed: this.lootSeed
+            };
         }
-        return this.rarity;
+        return { rarity: this.rarity, lootSeed: this.lootSeed };
+    }
+
+    update(dt) {
+        // Bob animation
+        this.bobOffset += dt * 2;
+        
+        // Glow animation
+        this.glowPhase += dt * 3;
+        
+        // Open animation
+        if (this.opened && this.openAnimation < 1) {
+            this.openAnimation += dt * 3;
+            if (this.openAnimation > 1) this.openAnimation = 1;
+        }
     }
 
     draw(ctx) {
+        const bobY = Math.sin(this.bobOffset) * 2;
+        const drawY = this.y + bobY;
+        
         if (this.opened) {
-            // Draw open chest (darker)
+            // Draw open chest (darker + bounce effect)
+            const bounce = Math.max(0, 1 - this.openAnimation) * 5;
             ctx.globalAlpha = 0.5;
-            ctx.drawImage(this.sprite, this.x, this.y);
+            ctx.drawImage(this.sprite, this.x, drawY - bounce);
             ctx.globalAlpha = 1;
         } else {
-            ctx.drawImage(this.sprite, this.x, this.y);
+            // Glow effect
+            const glowAlpha = 0.3 + Math.sin(this.glowPhase) * 0.2;
+            const glowSize = 4;
+            ctx.globalAlpha = glowAlpha;
+            ctx.fillStyle = this.rarity === 'legendary' ? '#ff00ff' : 
+                           this.rarity === 'epic' ? '#9c27b0' :
+                           this.rarity === 'rare' ? '#2196f3' : '#4caf50';
+            ctx.fillRect(
+                this.x - glowSize/2, 
+                drawY - glowSize/2, 
+                this.width + glowSize, 
+                this.height + glowSize
+            );
+            ctx.globalAlpha = 1;
+            
+            // Draw chest
+            ctx.drawImage(this.sprite, this.x, drawY);
 
             // Sparkle effect
             if (Math.random() < 0.1) {
                 const sparkX = this.x + Math.random() * this.width;
-                const sparkY = this.y + Math.random() * this.height;
+                const sparkY = drawY + Math.random() * this.height;
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(sparkX, sparkY, 2, 2);
             }
@@ -102,12 +199,12 @@ class Chest {
             ctx.fillStyle = '#44ff88';
             ctx.font = '8px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('[E]', this.centerX, this.y - 5);
+            ctx.fillText('[E]', this.centerX, drawY - 5);
 
             // Boss chest label
             if (this.isBossChest) {
                 ctx.fillStyle = '#ffcc00';
-                ctx.fillText('BOSS', this.centerX, this.y - 14);
+                ctx.fillText('BOSS', this.centerX, drawY - 14);
             }
         }
     }
@@ -193,103 +290,103 @@ const ItemDatabase = {
     init() {
         // Healing items
         this.register(new Item({
-            id: 'small_potion', name: 'Poción Pequeña', icon: '🧪',
-            desc: 'Cura 20 HP (instantáneo)', type: 'item', rarity: 'common', heal: 20
+            id: 'small_potion', icon: '🧪',
+            type: 'item', rarity: 'common', heal: 20
         }));
         this.register(new Item({
-            id: 'med_potion', name: 'Poción Mediana', icon: '🧴',
-            desc: 'Restaura 50 HP', type: 'heal', rarity: 'rare', heal: 50
+            id: 'med_potion', icon: '🧴',
+            type: 'heal', rarity: 'rare', heal: 50
         }));
         this.register(new Item({
-            id: 'large_potion', name: 'Poción Grande', icon: '⚗️',
-            desc: 'Restaura 100 HP', type: 'heal', rarity: 'epic', heal: 100
+            id: 'large_potion', icon: '⚗️',
+            type: 'heal', rarity: 'epic', heal: 100
         }));
         this.register(new Item({
-            id: 'elixir', name: 'Elixir de Vida', icon: '💎',
-            desc: 'Restaura toda tu HP', type: 'heal', rarity: 'legendary', heal: 999
+            id: 'elixir', icon: '💎',
+            type: 'heal', rarity: 'legendary', heal: 999
         }));
 
         // Mana potion (shop)
         this.register(new Item({
-            id: 'mana_potion', name: 'Poción de Maná', icon: '🔷',
-            desc: 'Restaura 40 Maná (instantáneo)', type: 'item', rarity: 'common', manaRestore: 40
+            id: 'mana_potion', icon: '🔷',
+            type: 'item', rarity: 'common', manaRestore: 40
         }));
 
         // Legendary stat items (for boss rewards / late game)
         this.register(new Item({
-            id: 'arcane_crown', name: 'Corona Arcana', icon: '👑',
-            desc: '+20 daño permanente', type: 'item', rarity: 'legendary', damageBonus: 20
+            id: 'arcane_crown', icon: '👑',
+            type: 'item', rarity: 'legendary', damageBonus: 20
         }));
         this.register(new Item({
-            id: 'dragon_heart', name: 'Corazón de Dragón', icon: '🐉',
-            desc: '+100 HP Máxima', type: 'item', rarity: 'legendary', maxHpBonus: 100
+            id: 'dragon_heart', icon: '🐉',
+            type: 'item', rarity: 'legendary', maxHpBonus: 100
         }));
         this.register(new Item({
-            id: 'void_boots', name: 'Botas del Vacío', icon: '🥾',
-            desc: '+60 velocidad permanente', type: 'item', rarity: 'legendary', speedBonus: 60
+            id: 'void_boots', icon: '🥾',
+            type: 'item', rarity: 'legendary', speedBonus: 60
         }));
 
         // Stat items
         this.register(new Item({
-            id: 'heart_container', name: 'Contenedor de Corazón', icon: '❤️',
-            desc: '+20 HP Máxima', type: 'item', rarity: 'rare', maxHpBonus: 20
+            id: 'heart_container', icon: '❤️',
+            type: 'item', rarity: 'rare', maxHpBonus: 20
         }));
         this.register(new Item({
-            id: 'mega_heart', name: 'Corazón Dorado', icon: '💛',
-            desc: '+50 HP Máxima', type: 'item', rarity: 'epic', maxHpBonus: 50
+            id: 'mega_heart', icon: '💛',
+            type: 'item', rarity: 'epic', maxHpBonus: 50
         }));
 
         // Utility items
         this.register(new Item({
-            id: 'potion_refill', name: 'Recarga de Pociones', icon: '🍶',
-            desc: '+2 Pociones', type: 'item', rarity: 'common', potions: 2
+            id: 'potion_refill', icon: '🍶',
+            type: 'item', rarity: 'common', potions: 2
         }));
         this.register(new Item({
-            id: 'gold_bag', name: 'Bolsa de Oro', icon: '💰',
-            desc: '+50 Oro', type: 'item', rarity: 'common', gold: 50
+            id: 'gold_bag', icon: '💰',
+            type: 'item', rarity: 'common', gold: 50
         }));
         this.register(new Item({
-            id: 'treasure', name: 'Tesoro', icon: '👑',
-            desc: '+200 Oro', type: 'item', rarity: 'rare', gold: 200
+            id: 'treasure', icon: '👑',
+            type: 'item', rarity: 'rare', gold: 200
         }));
         this.register(new Item({
-            id: 'royal_treasure', name: 'Tesoro Real', icon: '💎',
-            desc: '+500 Oro', type: 'item', rarity: 'epic', gold: 500
+            id: 'royal_treasure', icon: '💎',
+            type: 'item', rarity: 'epic', gold: 500
         }));
 
         // Shop upgrade
         this.register(new Item({
-            id: 'rune_pouch', name: 'Bolsa de Runas', icon: '🎒',
-            desc: '+1 slot de runas (permanente)', type: 'item', rarity: 'rare', runeSlotBonus: 1, shopOnly: true
+            id: 'rune_pouch', icon: '🎒',
+            type: 'item', rarity: 'rare', runeSlotBonus: 1, shopOnly: true
         }));
 
         // Active slot upgrade (shop only, expensive)
         this.register(new Item({
-            id: 'active_bandolier', name: 'Funda de Reliquias', icon: '🧷',
-            desc: '+1 slot de activo (permanente)', type: 'item', rarity: 'epic', activeSlotBonus: 1, shopOnly: true
+            id: 'active_bandolier', icon: '🧷',
+            type: 'item', rarity: 'epic', activeSlotBonus: 1, shopOnly: true
         }));
 
         // Active items (shop only)
         this.register(new Item({
-            id: 'blink_stone', name: 'Piedra de Blink', icon: '💠',
-            desc: 'Teletransporta hacia donde apuntas. [F]', type: 'active', rarity: 'rare',
+            id: 'blink_stone', icon: '💠',
+            type: 'active', rarity: 'rare',
             cooldown: 8, activeEffect: 'blink', shopOnly: true
         }));
         this.register(new Item({
-            id: 'smoke_bomb', name: 'Bomba de Humo', icon: '💨',
-            desc: '1.2s de invulnerabilidad. [F]', type: 'active', rarity: 'rare',
+            id: 'smoke_bomb', icon: '💨',
+            type: 'active', rarity: 'rare',
             cooldown: 12, activeEffect: 'smoke', shopOnly: true
         }));
         this.register(new Item({
-            id: 'healing_totem', name: 'Totem de Curación', icon: '🌿',
-            desc: 'Cura 20 HP (2 veces por sala). [F]', type: 'active', rarity: 'epic',
+            id: 'healing_totem', icon: '🌿',
+            type: 'active', rarity: 'epic',
             cooldown: 18, activeEffect: 'heal', shopOnly: true
         }));
 
         // Mana potion (shop consumable)
         this.register(new Item({
-            id: 'mana_potion', name: 'Poción de Maná', icon: '🔷',
-            desc: 'Restaura 30 Maná', type: 'mana', rarity: 'common', manaRestore: 30
+            id: 'mana_potion', icon: '🔷',
+            type: 'mana', rarity: 'common', manaRestore: 30
         }));
 
 // ===========================
@@ -297,140 +394,137 @@ const ItemDatabase = {
 // ===========================
 // Mana / casting
 this.register(new Item({
-    id: 'mana_orb', name: 'Orbe de Maná', icon: '🔵',
-    desc: '+15 Maná Máx.', type: 'item', rarity: 'common', maxManaBonus: 15
+    id: 'mana_orb', icon: '🔵',
+    type: 'item', rarity: 'common', maxManaBonus: 15
 }));
 this.register(new Item({
-    id: 'mana_tome', name: 'Tomo de Maná', icon: '📘',
-    desc: '+30 Maná Máx.', type: 'item', rarity: 'rare', maxManaBonus: 30
+    id: 'mana_tome', icon: '📘',
+    type: 'item', rarity: 'rare', maxManaBonus: 30
 }));
 this.register(new Item({
-    id: 'mana_font', name: 'Fuente Arcana', icon: '⛲',
-    desc: '+60% regen de maná', type: 'item', rarity: 'epic', manaRegenBonus: 0.6
+    id: 'mana_font', icon: '⛲',
+    type: 'item', rarity: 'epic', manaRegenBonus: 0.6
 }));
 this.register(new Item({
-    id: 'mana_forged', name: 'Cristal Forjado', icon: '🔷',
-    desc: '-1 costo de maná por disparo', type: 'item', rarity: 'rare', manaCostFlat: -1
+    id: 'mana_forged', icon: '🔷',
+    type: 'item', rarity: 'rare', manaCostFlat: -1
 }));
 
 // DPS / casting speed
 this.register(new Item({
-    id: 'spell_focus', name: 'Foco de Hechizo', icon: '🧿',
-    desc: '+15% velocidad de disparo', type: 'item', rarity: 'rare', fireRateBonus: 0.15
+    id: 'spell_focus', icon: '🧿',
+    type: 'item', rarity: 'rare', fireRateBonus: 0.15
 }));
 this.register(new Item({
-    id: 'arcane_metronome', name: 'Metrónomo Arcano', icon: '🎵',
-    desc: '+30% velocidad de disparo', type: 'item', rarity: 'epic', fireRateBonus: 0.3
+    id: 'arcane_metronome', icon: '🎵',
+    type: 'item', rarity: 'epic', fireRateBonus: 0.3
 }));
 
 // Projectiles
 this.register(new Item({
-    id: 'long_barrel', name: 'Conducto Largo', icon: '📏',
-    desc: '+20% rango de proyectil', type: 'item', rarity: 'rare', projectileRangeBonus: 0.2
+    id: 'long_barrel', icon: '📏',
+    type: 'item', rarity: 'rare', projectileRangeBonus: 0.2
 }));
 this.register(new Item({
-    id: 'eagle_eye', name: 'Ojo de Águila', icon: '🦅',
-    desc: '+40% rango de proyectil', type: 'item', rarity: 'epic', projectileRangeBonus: 0.4
+    id: 'eagle_eye', icon: '🦅',
+    type: 'item', rarity: 'epic', projectileRangeBonus: 0.4
 }));
 this.register(new Item({
-    id: 'wind_core', name: 'Núcleo de Viento', icon: '🌪️',
-    desc: '+20% velocidad de proyectil', type: 'item', rarity: 'common', projectileSpeedBonus: 0.2
+    id: 'wind_core', icon: '🌪️',
+    type: 'item', rarity: 'common', projectileSpeedBonus: 0.2
 }));
 this.register(new Item({
-    id: 'storm_core', name: 'Núcleo de Tormenta', icon: '⛈️',
-    desc: '+45% velocidad de proyectil', type: 'item', rarity: 'rare', projectileSpeedBonus: 0.45
+    id: 'storm_core', icon: '⛈️',
+    type: 'item', rarity: 'rare', projectileSpeedBonus: 0.45
 }));
 
 // ===========================
 // ITEM SETS (pieces + visible progress)
 // ===========================
-// Set: Tormenta (0/3)
-// - Anillo de Tormenta
-// - Capa de Tormenta
-// - Núcleo de Tormenta
+// Set: Storm (0/3)
+// - Storm Ring
+// - Storm Cloak
+// - Storm Nucleus
 this.register(new Item({
-    id: 'storm_ring', name: 'Anillo de Tormenta', icon: '💍',
-    desc: 'Set Tormenta (1/3).', type: 'item', rarity: 'rare',
-    setId: 'storm', setPiece: 'Anillo de Tormenta',
-    projectileSpeedBonus: 0.15
+    id: 'storm_ring', icon: '💍',
+    type: 'item', rarity: 'rare',
+    setId: 'storm', setPiece: 'storm_ring'
 }));
 this.register(new Item({
-    id: 'storm_cloak', name: 'Capa de Tormenta', icon: '🧥',
-    desc: 'Set Tormenta (1/3).', type: 'item', rarity: 'epic',
-    setId: 'storm', setPiece: 'Capa de Tormenta',
-    speedBonus: 20
+    id: 'storm_cloak', icon: '🧥',
+    type: 'item', rarity: 'epic',
+    setId: 'storm', setPiece: 'storm_cloak'
 }));
 this.register(new Item({
-    id: 'storm_nucleus', name: 'Núcleo de Tormenta', icon: '⚡',
-    desc: 'Set Tormenta (1/3).', type: 'item', rarity: 'epic',
-    setId: 'storm', setPiece: 'Núcleo de Tormenta',
-    damageBonus: 8
+    id: 'storm_nucleus', icon: '⚡',
+    type: 'item', rarity: 'epic',
+    setId: 'storm', setPiece: 'storm_nucleus'
 }));
 
 
 // Survivability
 this.register(new Item({
-    id: 'iron_skin', name: 'Piel de Hierro', icon: '🛡️',
-    desc: '+40 HP Máx.', type: 'item', rarity: 'rare', maxHpBonus: 40
+    id: 'iron_skin', icon: '🛡️',
+    type: 'item', rarity: 'rare', maxHpBonus: 40
 }));
 
 
 // Combat stats
 this.register(new Item({
-    id: 'ruby_focus', name: 'Foco Rubí', icon: '♦️',
-    desc: '+12 daño permanente', type: 'item', rarity: 'epic', damageBonus: 12
+    id: 'ruby_focus', icon: '♦️',
+    type: 'item', rarity: 'epic', damageBonus: 12
 }));
 this.register(new Item({
-    id: 'obsidian_edge', name: 'Borde Obsidiana', icon: '🗡️',
-    desc: '+6 daño permanente', type: 'item', rarity: 'rare', damageBonus: 6
+    id: 'obsidian_edge', icon: '🗡️',
+    type: 'item', rarity: 'rare', damageBonus: 6
 }));
 this.register(new Item({
-    id: 'swift_boots', name: 'Botas de Prisa', icon: '👟',
-    desc: '+30 velocidad permanente', type: 'item', rarity: 'rare', speedBonus: 30
+    id: 'swift_boots', icon: '👟',
+    type: 'item', rarity: 'rare', speedBonus: 30
 }));
 this.register(new Item({
-    id: 'swift_cloak', name: 'Capa Veloz', icon: '🧥',
-    desc: '+55 velocidad permanente', type: 'item', rarity: 'epic', speedBonus: 55
+    id: 'swift_cloak', icon: '🧥',
+    type: 'item', rarity: 'epic', speedBonus: 55
 }));
 
 // Potions / sustain
 this.register(new Item({
-    id: 'alchemist_kit', name: 'Kit de Alquimista', icon: '🧫',
-    desc: '+3 pociones', type: 'item', rarity: 'rare', potions: 3
+    id: 'alchemist_kit', icon: '🧫',
+    type: 'item', rarity: 'rare', potions: 3
 }));
 this.register(new Item({
-    id: 'potion_belt', name: 'Cinturón de Pociones', icon: '🧷',
-    desc: '+5 pociones', type: 'item', rarity: 'epic', potions: 5
+    id: 'potion_belt', icon: '🧷',
+    type: 'item', rarity: 'epic', potions: 5
 }));
 
 // More mana goodies
 this.register(new Item({
-    id: 'mana_battery', name: 'Batería Arcana', icon: '🔋',
-    desc: '+20 Maná Máx.', type: 'item', rarity: 'common', maxManaBonus: 20
+    id: 'mana_battery', icon: '🔋',
+    type: 'item', rarity: 'common', maxManaBonus: 20
 }));
 this.register(new Item({
-    id: 'ether_conduit', name: 'Conducto Etéreo', icon: '🧬',
-    desc: '+25% velocidad de proyectil', type: 'item', rarity: 'rare', projectileSpeedBonus: 0.25
+    id: 'ether_conduit', icon: '🧬',
+    type: 'item', rarity: 'rare', projectileSpeedBonus: 0.25
 }));
 this.register(new Item({
-    id: 'astral_compass', name: 'Brújula Astral', icon: '🧭',
-    desc: '+25% rango de proyectil', type: 'item', rarity: 'rare', projectileRangeBonus: 0.25
+    id: 'astral_compass', icon: '🧭',
+    type: 'item', rarity: 'rare', projectileRangeBonus: 0.25
 }));
 
 // Fire rate / casting
 this.register(new Item({
-    id: 'spell_sandglass', name: 'Reloj de Arena', icon: '⌛',
-    desc: '+20% velocidad de disparo', type: 'item', rarity: 'rare', fireRateBonus: 0.20
+    id: 'spell_sandglass', icon: '⌛',
+    type: 'item', rarity: 'rare', fireRateBonus: 0.20
 }));
 this.register(new Item({
-    id: 'caster_gloves', name: 'Guantes del Hechicero', icon: '🧤',
-    desc: '+10% velocidad de disparo', type: 'item', rarity: 'common', fireRateBonus: 0.10
+    id: 'caster_gloves', icon: '🧤',
+    type: 'item', rarity: 'common', fireRateBonus: 0.10
 }));
 
 // Economy
 this.register(new Item({
-    id: 'coin_charm', name: 'Amuleto de Monedas', icon: '🪙',
-    desc: '+150 oro', type: 'item', rarity: 'rare', gold: 150
+    id: 'coin_charm', icon: '🪙',
+    type: 'item', rarity: 'rare', gold: 150
 }));
     },
 
@@ -454,6 +548,19 @@ this.register(new Item({
         return { ...Utils.randomChoice(filtered) };
     },
 
+    // Seeded version for deterministic loot
+    getRandomItemSeeded(preferredRarity = 'common', rng) {
+        const itemList = Object.values(this.items).filter(i => !i.shopOnly && i.type !== 'active');
+
+        // Filter by rarity preference
+        let filtered = itemList.filter(i => i.rarity === preferredRarity);
+        if (filtered.length === 0) {
+            filtered = itemList.filter(i => i.rarity === 'common');
+        }
+
+        return { ...Utils.seededChoice(rng, filtered) };
+    },
+
     getByRarity(rarity) {
         return Object.values(this.items).filter(i => i.rarity === rarity);
     }
@@ -469,10 +576,10 @@ window.ItemDatabase = ItemDatabase;
 const SetDatabase = {
     storm: {
         id: 'storm',
-        name: 'Tormenta',
-        pieces: ['Anillo de Tormenta','Capa de Tormenta','Núcleo de Tormenta'],
-        bonus2: { desc: '+15% velocidad de proyectil', apply: (p)=>{ p.projectileSpeedMult *= 1.15; } },
-        bonus3: { desc: 'Dash deja un disparo de rayo', apply: (p)=>{ p.setStormDash = true; } }
+        nameKey: 'setStormName',
+        pieces: ['storm_ring','storm_cloak','storm_nucleus'],
+        bonus2: { descKey: 'setStormBonus2Desc', apply: (p)=>{ p.projectileSpeedMult *= 1.15; } },
+        bonus3: { descKey: 'setStormBonus3Desc', apply: (p)=>{ p.setStormDash = true; } }
     }
 };
 window.SetDatabase = SetDatabase;

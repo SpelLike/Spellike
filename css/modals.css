@@ -1014,3 +1014,79 @@ max-height: 86vh;
 }
 
 .set-bonuses .active { color: #ffffff; }
+
+
+/* ==========================================
+   LANGUAGE SELECTOR (Settings)
+   ========================================== */
+
+.language-selector{
+    margin-top: 18px;
+}
+
+.language-selector h3{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size: 20px;
+    margin: 0 0 10px 0;
+    color: var(--text-primary);
+}
+
+.language-options{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+}
+
+.language-btn{
+    font-family: var(--font-pixel);
+    font-size: 12px;
+    padding: 10px 14px;
+    background: rgba(30,30,53,0.9);
+    border: 2px solid rgba(123,77,255,0.65);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    border-radius: 10px;
+    user-select:none;
+    outline: none;
+}
+
+.language-btn .flag{
+    font-size: 14px;
+    filter: drop-shadow(0 0 6px rgba(123,77,255,0.45));
+}
+
+.language-btn:hover{
+    transform: translateY(-1px);
+    border-color: rgba(157,122,255,0.95);
+    color: var(--text-primary);
+    box-shadow: 0 0 16px rgba(123,77,255,0.25);
+}
+
+.language-btn.active{
+    background: rgba(123,77,255,0.22);
+    border-color: rgba(123,77,255,1);
+    color: var(--text-primary);
+    box-shadow: 0 0 18px rgba(123,77,255,0.35);
+}
+
+.language-btn:active{
+    transform: translateY(0px);
+}
+
+.language-selector p,
+.language-selector .hint,
+#languageReloadHint{
+    margin: 8px 0 0 0;
+    font-family: var(--font-pixel);
+    font-size: 12px;
+    color: rgba(255,255,255,0.65);
+}
+
+.language-hint{ line-height: 1.4; opacity: 0.85; }

@@ -29,7 +29,7 @@ class Player extends Entity {
         this.damage = 10;
         this.fireRate = 0.2;
         this.projectileSpeed = 500;
-        this.projectileRange = 800;
+        this.projectileRange = 414;
 
         // Base mana cost per shot (runes/items can modify)
         this.baseManaCost = 3;
@@ -97,6 +97,22 @@ class Player extends Entity {
 
         // Mana regen bonus from runes
         this.manaRegenMultiplier = 1;
+
+        // Synergy bonuses (applied by SynergySystem)
+        this.synergyBonuses = {
+            damageMultiplier: 1,
+            critChance: 0,
+            critDamage: 0,
+            manaRegen: 0,
+            manaCost: 0,
+            fireRateBonus: 0,
+            rangeBonus: 0,
+            speedBonus: 0,
+            pierceCount: 0,
+            chainCount: 0,
+            explosionRadius: 0,
+            onKillHealPct: 0
+        };
 
         // Stats tracking
         this.stats = {
@@ -231,7 +247,13 @@ class Player extends Entity {
         // Mana regen (with rune bonuses)
         if (this.mana < this.maxMana) {
             const baseRegen = 5;
-            const totalRegen = baseRegen * this.manaRegenMultiplier;
+            let totalRegen = baseRegen * this.manaRegenMultiplier;
+            
+            // Apply synergy bonus
+            if (this.synergyBonuses && this.synergyBonuses.manaRegen) {
+                totalRegen *= (1 + this.synergyBonuses.manaRegen);
+            }
+            
             this.mana = Math.min(this.maxMana, this.mana + totalRegen * dt);
         }
     }
@@ -249,8 +271,13 @@ class Player extends Entity {
             if (typeof rune.manaCost === 'number') cost += rune.manaCost;
         }
 
-        // Never allow negative cost. Keep a tiny floor so "free spam" doesn't break pacing.
-        return Math.max(0, Math.round(cost * 10) / 10);
+        // Apply synergy bonus
+        if (this.synergyBonuses && this.synergyBonuses.manaCost) {
+            cost += this.synergyBonuses.manaCost;
+        }
+
+        // Never allow free shots: mana should always matter for pacing.
+        return Math.max(1.5, Math.round(cost * 10) / 10);
     }
 
     getEffectiveFireRate() {
@@ -266,6 +293,12 @@ class Player extends Entity {
             if (!rune) continue;
             if (typeof rune.fireRateBonus === 'number') bonus += rune.fireRateBonus;
         }
+        
+        // Apply synergy bonus
+        if (this.synergyBonuses && this.synergyBonuses.fireRateBonus) {
+            bonus += this.synergyBonuses.fireRateBonus;
+        }
+        
                 // Cap fire rate bonus to +100% max (2x speed => half interval)
         // In this system bonus is a fraction that reduces interval: 0.5 => 50% interval.
         bonus = Math.max(0, Math.min(bonus, 0.5));
@@ -290,6 +323,12 @@ class Player extends Entity {
                 spd *= (1 + rune.speedBonus / 100);
             }
         }
+        
+        // Apply synergy bonus
+        if (this.synergyBonuses && this.synergyBonuses.speedBonus) {
+            spd *= (1 + this.synergyBonuses.speedBonus / 100);
+        }
+        
         return spd;
     }
 
@@ -389,6 +428,11 @@ class Player extends Entity {
             if (rune && rune.rangeBonus) finalRange *= (1 + rune.rangeBonus);
             if (rune && rune.rangeMultiplier) finalRange *= rune.rangeMultiplier;
         }
+        
+        // Apply synergy bonus
+        if (this.synergyBonuses && this.synergyBonuses.rangeBonus) {
+            finalRange *= (1 + this.synergyBonuses.rangeBonus);
+        }
 
         for (let i = 0; i < projectileCount; i++) {
             const projAngle = projectileCount === 1 ? angle : startAngle + angleStep * i;
@@ -421,6 +465,12 @@ class Player extends Entity {
         if (window.Game && Game.modifiers && Game.modifiers.playerDamageMult) {
             dmg *= Game.modifiers.playerDamageMult;
         }
+        
+        // Apply synergy bonuses
+        if (this.synergyBonuses && this.synergyBonuses.damageMultiplier) {
+            dmg *= this.synergyBonuses.damageMultiplier;
+        }
+        
         return Math.floor(dmg);
     }
 
@@ -454,6 +504,26 @@ class Player extends Entity {
         if ((this.chainCountBonus || 0) > 0) { data.chainCount = (data.chainCount || 0) + this.chainCountBonus; }
         if (this._scriptPierce) { data.pierceCount = (data.pierceCount || 0) + this._scriptPierce; }
         if (this._scriptBounce) { data.bounceCount = (data.bounceCount || 0) + this._scriptBounce; }
+        
+        // Apply synergy bonuses
+        if (this.synergyBonuses) {
+            if (this.synergyBonuses.critChance) {
+                data.critChance = (data.critChance || 0) + this.synergyBonuses.critChance;
+            }
+            if (this.synergyBonuses.critDamage) {
+                data.critDamage = (data.critDamage || 1) + this.synergyBonuses.critDamage;
+            }
+            if (this.synergyBonuses.pierceCount) {
+                data.pierceCount = (data.pierceCount || 0) + this.synergyBonuses.pierceCount;
+            }
+            if (this.synergyBonuses.chainCount) {
+                data.chainCount = (data.chainCount || 0) + this.synergyBonuses.chainCount;
+            }
+            if (this.synergyBonuses.explosionRadius) {
+                data.radius = (data.radius || 0) + this.synergyBonuses.explosionRadius;
+            }
+        }
+        
         return data;
     }
 
@@ -513,8 +583,16 @@ class Player extends Entity {
     takeDamage(amount) {
         if (this.iFrameTimer > 0 || this.isDashing) return false;
 
-        this.hp -= amount;
-        this.stats.damageTaken += amount;
+        let finalAmount = amount;
+        let takenMult = 1;
+        for (const rune of this.runes) {
+            if (!rune) continue;
+            if (typeof rune.damageTakenMultiplier === 'number') takenMult *= rune.damageTakenMultiplier;
+        }
+        finalAmount = Math.max(1, Math.floor(finalAmount * takenMult));
+
+        this.hp -= finalAmount;
+        this.stats.damageTaken += finalAmount;
         this.iFrameTimer = this.iFrames;
 
         ParticleSystem.hit(this.centerX, this.centerY, '#ff3333');
@@ -523,7 +601,7 @@ class Player extends Entity {
         // Scripted runes: OnDamageTaken
         try {
             if (window.RuneScript) {
-                RuneScript.trigger('OnDamageTaken', { player: this, room: (window.Game && Game.dungeon ? Game.dungeon.getCurrentRoom() : null), amount });
+                RuneScript.trigger('OnDamageTaken', { player: this, room: (window.Game && Game.dungeon ? Game.dungeon.getCurrentRoom() : null), amount: finalAmount });
             }
         } catch (e) { }
 

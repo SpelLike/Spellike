@@ -3,10 +3,14 @@
 // ==========================================
 
 class Dungeon {
-    constructor(biome, difficulty = 'normal', ngPlusLevel = 0) {
+    constructor(biome, difficulty = 'normal', ngPlusLevel = 0, seedText = '') {
         this.biome = biome;
         this.difficulty = difficulty;
         this.ngPlusLevel = ngPlusLevel;
+        this.seedText = seedText || '';
+        
+        // Create seeded RNG for dungeon generation and loot
+        this.rng = this.seedText ? Utils.createSeededRNG(this.seedText) : null;
 
         // Graph nodes (supports forks + backtracking)
         this.nodes = []; // { id, room, type, connections: [id], pos:{x,y} }
@@ -47,31 +51,7 @@ class Dungeon {
     // -------------------------
     // Encounter archetypes (compositions)
     // -------------------------
-    chooseEncounterArchetype(roomStep = 0) {
-        const k = (window.Game && typeof Game.bossKillsThisRun === 'number') ? Game.bossKillsThisRun : 0;
 
-        // Biome flavored pools
-        const pools = {
-            forest:   ['bunker','pursuit','swarm','killbox'],
-            crypt:    ['bunker','swarm','pursuit','killbox'],
-            crystal:  ['killbox','bunker','pursuit','swarm'],
-            ruins:    ['bunker','killbox','pursuit','swarm'],
-            swamp:    ['swarm','pursuit','bunker','killbox'],
-            inferno:  ['pursuit','killbox','bunker','swarm']
-        };
-        const pool = pools[this.biome] || ['bunker','pursuit','swarm','killbox'];
-
-        // Progress bias: after boss kills, more tactical rooms
-        const bias = Math.min(3, k);
-        const weights = pool.map((id, idx) => 1 + (idx === 0 ? bias * 0.3 : 0) + (Math.random() * 0.15));
-        const total = weights.reduce((a,b)=>a+b,0);
-        let r = Math.random() * total;
-        for (let i=0;i<pool.length;i++){
-            r -= weights[i];
-            if (r <= 0) return pool[i];
-        }
-        return pool[0];
-    }
 
     // Create a node with a room
     addNode(type, pos) {
@@ -160,25 +140,32 @@ class Dungeon {
 
     populateRoom(room, roomType, biomeData, step) {
         const enemies = this.getEnemiesForRoom(biomeData.enemies, step);
+        const mult = this.getRoomMult(step);
 
         if (roomType === 'combat') {
-            // Archetype-driven encounter (no random soup)
-            const archetype = this.chooseEncounterArchetype(step);
-            const mult = this.getRoomMult(step);
-            if (typeof room.spawnEncounter === 'function') room.spawnEncounter(archetype, mult, enemies, this.biome);
-            else room.spawnEnemies(Math.max(1, Utils.random(4, 7)), mult, enemies);
+            // RANDOM PURO
+            room.spawnEnemies(Utils.random(4, 7), mult, enemies);
         } else if (roomType === 'elite') {
-            // Tactical elite: guaranteed "bunker" feel
-            const mult = this.getRoomMult(step);
-            if (typeof room.spawnEncounter === 'function') room.spawnEncounter('bunker', mult * 1.15, enemies, this.biome, { forceElite: true });
-            else {
-                room.spawnEnemies(1, mult * 2.5, enemies);
-                room.enemies[0].isElite = true;
+            // RANDOM PURO + todos elite
+            room.spawnEnemies(Utils.random(4, 7), mult, enemies);
+            for (const e of room.enemies) {
+                if (!e) continue;
+                e.isElite = true;
+                if (typeof e.maxHp === 'number') {
+                    e.maxHp = Math.floor(e.maxHp * 2.0);
+                    e.hp = e.maxHp;
+                }
+                if (typeof e.damage === 'number') {
+                    e.damage = Math.floor(e.damage * 1.35);
+                }
+                if (typeof e.goldValue === 'number') {
+                    e.goldValue = Math.floor(e.goldValue * 1.5);
+                }
             }
         } else if (roomType === 'miniboss') {
             const miniType = Utils.randomChoice(enemies);
-            room.spawnMiniBoss(miniType, this.getRoomMult(step) * 2.2);
-            room.spawnEnemies(2 + Math.floor(step / 3), this.getRoomMult(step) * 0.9, enemies);
+            room.spawnMiniBoss(miniType, mult * 2.2);
+            room.spawnEnemies(2 + Math.floor(step / 3), mult * 0.9, enemies);
         } else if (roomType === 'event') {
             // One-shot rewards (supports backtracking)
             room.spawnChest('rare');
