@@ -2,6 +2,28 @@
 // ARCANE DEPTHS - UI Manager (MAJOR UPDATE)
 // ==========================================
 
+// ----------------------------------------------------------
+// Shared helpers (must be available across the whole file)
+// ----------------------------------------------------------
+// Some UI code builds tooltips / swap screens using a helper
+// named `getRuneText(...)`. In earlier versions it existed only
+// inside a single function scope, which caused:
+//   Uncaught ReferenceError: getRuneText is not defined
+// when other UI sections (HUD rune slots) tried to call it.
+//
+// Keep it global (file scope) and also expose it on `window`
+// for maximum backwards-compat with any other scripts.
+function getRuneText(r) {
+    const id = r?.id || r?.runeId || r?.key || r?.name;
+    const tr = (window.i18n && typeof window.i18n.rune === "function" && id) ? window.i18n.rune(id) : null;
+    return {
+        id,
+        name: r?.name || tr?.name || id || "Rune",
+        desc: r?.desc || tr?.desc || ""
+    };
+}
+window.getRuneText = getRuneText;
+
 const UI = {
     screens: {},
     currentScreen: 'main-menu',
@@ -343,12 +365,12 @@ const UI = {
             right.className = 'meta-upgrade-right';
             const level = document.createElement('div');
             level.className = 'meta-upgrade-level';
-            level.textContent = `Nivel ${lvl}/${max} - ${d.value()}`;
+            level.textContent = `${(window.i18n?.t ? i18n.t('metaLevel') : 'Level')} ${lvl}/${max} - ${d.value()}`;
 
             const btn = document.createElement('button');
             btn.className = 'meta-buy-btn';
             btn.disabled = isMax || !canBuy;
-            btn.textContent = isMax ? 'MAX' : `COMPRAR (${cost})`;
+            btn.textContent = isMax ? 'MAX' : `${(window.i18n?.t ? i18n.t('shopBuy') : 'BUY')} (${cost})`;
             btn.onclick = () => {
                 AudioManager.play('menuClick');
                 if (window.Meta && typeof Meta.buyUpgrade === 'function') {
@@ -1694,7 +1716,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
         tooltip.innerHTML = `
             <div class="tooltip-header">
                 <span class="tooltip-icon">${rune.icon}</span>
-                <span class="tooltip-name">${rune.name}</span>
+                <span class="tooltip-name">${getRuneText(rune).name}</span>
             </div>
             <div class="tooltip-desc">${rune.desc || 'Runa mágica'}</div>
             <div class="tooltip-rarity rarity-${rune.rarity}">${rune.rarity?.toUpperCase() || 'COMÃšN'}</div>
@@ -1798,6 +1820,16 @@ document.getElementById('btn-apply-settings').onclick = () => {
     },
 
     showRuneSwapDialog(newRune) {
+        const t = (key, fallback='') => (window.i18n && typeof window.i18n.t==='function') ? window.i18n.t(key) : (fallback || key);
+        const getRuneText = (r) => {
+            const id = r?.id || r?.runeId || r?.key || r?.name;
+            const tr = (window.i18n && typeof window.i18n.rune==='function' && id) ? window.i18n.rune(id) : null;
+            return {
+                id,
+                name: r?.name || tr?.name || id || 'Rune',
+                desc: r?.desc || tr?.desc || ''
+            };
+        };
         if (this.lootModal) this.lootModal.remove();
 
         const modal = document.createElement('div');
@@ -1810,8 +1842,8 @@ document.getElementById('btn-apply-settings').onclick = () => {
                 slotsHtml += `
                     <div class="swap-slot" data-slot="${i}">
                         <div class="swap-icon">${rune.icon}</div>
-                        <div class="swap-name">${rune.name}</div>
-                        <div class="swap-desc">${rune.desc || ''}</div>
+                        <div class="swap-name">${getRuneText(rune).name}</div>
+                        <div class="swap-desc">${getRuneText(rune).desc || ''}</div>
                     </div>
                 `;
             }
@@ -1819,16 +1851,16 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
         modal.innerHTML = `
             <div class="loot-content">
-                <h2>INTERCAMBIAR RUNA</h2>
+                <h2>${t('runeSwapTitle','SWAP RUNE')}</h2>
                 <div class="new-rune-preview">
-                    <span>Nueva: ${newRune.icon} ${newRune.name}</span>
-                    <p>${newRune.desc || ''}</p>
+                    <span>${t('runeSwapNew','New:')} ${newRune.icon} ${getRuneText(newRune).name}</span>
+                    <p>${getRuneText(newRune).desc || ''}</p>
                 </div>
-                <p class="swap-instruction">Elige cuál runa reemplazar:</p>
+                <p class="swap-instruction">${t('runeSwapChoose','Choose a rune to replace:')}</p>
                 <div class="swap-slots">
                     ${slotsHtml}
                 </div>
-                <button class="discard-btn" id="cancel-swap">Cancelar</button>
+                <button class="discard-btn" id="cancel-swap">${t('btnCancel','Cancel')}</button>
             </div>
         `;
 
@@ -1926,7 +1958,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
                 <div class="swap-slots">
                     ${slotsHtml}
                 </div>
-                <button class="discard-btn" id="cancel-active-swap">Cancelar</button>
+                <button class="discard-btn" id="cancel-active-swap" >${t('cancel','Cancel')}</button>
             </div>
         `;
 
@@ -2032,6 +2064,20 @@ document.getElementById('btn-apply-settings').onclick = () => {
     showShrineChoice() {
         Game.paused = true;
 
+        // i18n helper (prevents crashes if a key is missing or i18n isn't loaded)
+        const t = (key, fallback = '') => {
+            try {
+                if (window.i18n && typeof window.i18n.t === 'function') {
+                    const v = window.i18n.t(key);
+                    if (v && v !== key) return v;
+                }
+            } catch (e) {}
+            return fallback || key;
+        };
+
+        // Use unicode escapes so the shrine emoji never turns into "â›©..."
+        const shrineEmoji = '\u26E9\uFE0F';
+
         const modal = document.createElement('div');
         modal.className = 'loot-modal';
         modal.id = 'shrine-modal';
@@ -2039,9 +2085,9 @@ document.getElementById('btn-apply-settings').onclick = () => {
         const p = Game.player;
 
         const options = [
-            { id: 'heal', icon: '💚', name: 'Sanación', desc: 'Cura 40% de tu HP máximo', apply: () => p.heal(Math.floor(p.maxHp * 0.4)) },
-            { id: 'gold', icon: '💰', name: 'Ofrenda', desc: '+200 oro', apply: () => { p.gold += 200; } },
-            { id: 'potion', icon: '🧪', name: 'Frascos', desc: '+2 pociones', apply: () => { p.potions = Math.min(10, p.potions + 2); } }
+            { id: 'heal', icon: '💚', name: t('shrine_heal_name', 'Healing'), desc: t('shrine_heal_desc', 'Heal 40% of your max HP'), apply: () => { p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.4)); } },
+            { id: 'gold', icon: '💰', name: t('shrine_gold_name', 'Offering'), desc: t('shrine_gold_desc', '+200 gold'), apply: () => { p.gold += 200; } },
+            { id: 'potion', icon: '🧪', name: t('shrine_potion_name', 'Flasks'), desc: t('shrine_potion_desc', '+2 potions'), apply: () => { p.potions = Math.min(10, p.potions + 2); } }
         ];
 
         let cards = '';
@@ -2057,12 +2103,12 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
         modal.innerHTML = `
             <div class="loot-content">
-                <h2>â›©ï¸ SANTUARIO</h2>
-                <p style="margin:0 0 10px 0; opacity:0.9">Elige una bendición rápida:</p>
+                <h2>${shrineEmoji} ${t('shrine_title', 'Shrine')}</h2>
+                <p style="margin:0 0 10px 0; opacity:0.9">${t('shrine_subtitle', 'Choose a quick blessing:')}</p>
                 <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
                     ${cards}
                 </div>
-                <button class="discard-btn" id="close-shrine">Cerrar</button>
+                <button class="discard-btn" id="close-shrine">${t('shrine_close', 'Close')}</button>
             </div>
         `;
 
@@ -2072,8 +2118,10 @@ document.getElementById('btn-apply-settings').onclick = () => {
             card.onclick = () => {
                 const idx = parseInt(card.dataset.idx);
                 options[idx].apply();
-                ParticleSystem.burst(p.centerX, p.centerY, 18, { color: '#b388ff', life: 0.7, size: 4, speed: 3 });
-                AudioManager.play('pickup');
+                if (window.ParticleSystem && typeof ParticleSystem.burst === 'function') {
+                    ParticleSystem.burst(p.centerX, p.centerY, 18, { color: '#b388ff', life: 0.7, size: 4, speed: 3 });
+                }
+                if (window.AudioManager && typeof AudioManager.play === 'function') AudioManager.play('pickup');
                 modal.remove();
                 Game.paused = false;
             };
@@ -2095,10 +2143,44 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
         const p = Game.player;
 
+        // Safe translator (prevents crashes if something is missing)
+        const t = (key, fallback) => {
+            try {
+                if (window.i18n && typeof i18n.t === 'function') {
+                    const v = i18n.t(key);
+                    if (v && v !== key) return v;
+                }
+            } catch (e) {}
+            return fallback ?? key;
+        };
+
+        // Use unicode escapes to avoid mojibake/encoding issues in some editors
+        const ICON_FIRE = '\uD83D\uDD25';        // 🔥
+        const ICON_SWORD = '\u2694\uFE0F';       // ⚔️
+        const ICON_VIAL = '\uD83E\uDDEA';        // 🧪
+
         const options = [
-            { id: 'rest', icon: '🔥', name: 'Descansar', desc: 'Cura 35% de tu HP maximo', apply: () => p.heal(Math.floor(p.maxHp * 0.35)) },
-            { id: 'sharpen', icon: '⚔️', name: 'Afilado', desc: '+4 dano permanente (run)', apply: () => { p.damage += 4; } },
-            { id: 'brew', icon: '🧪', name: 'Reponer', desc: '+1 pocion', apply: () => { p.potions = Math.min(10, p.potions + 1); } }
+            {
+                id: 'rest',
+                icon: ICON_FIRE,
+                name: t('campfire_rest_name', 'Rest'),
+                desc: t('campfire_rest_desc', 'Heal 35% of your max HP'),
+                apply: () => p.heal(Math.floor(p.maxHp * 0.35))
+            },
+            {
+                id: 'sharpen',
+                icon: ICON_SWORD,
+                name: t('campfire_sharpen_name', 'Sharpen'),
+                desc: t('campfire_sharpen_desc', '+4 permanent damage (run)'),
+                apply: () => { p.damage += 4; }
+            },
+            {
+                id: 'brew',
+                icon: ICON_VIAL,
+                name: t('campfire_refill_name', 'Refill'),
+                desc: t('campfire_refill_desc', '+1 potion'),
+                apply: () => { p.potions = Math.min(10, p.potions + 1); }
+            }
         ];
 
         let cards = '';
@@ -2114,12 +2196,12 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
         modal.innerHTML = `
             <div class="loot-content">
-                <h2>🔥 HOGUERA</h2>
-                <p style="margin:0 0 10px 0; opacity:0.9">Tomate un respiro y elegi un beneficio:</p>
+                <h2>${ICON_FIRE} ${t('campfire_title', 'CAMPFIRE')}</h2>
+                <p style="margin:0 0 10px 0; opacity:0.9">${t('campfire_subtitle', 'Take a breath and choose a benefit:')}</p>
                 <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
                     ${cards}
                 </div>
-                <button class="discard-btn" id="close-campfire">Cerrar</button>
+                <button class="discard-btn" id="close-campfire">${t('campfire_close', t('btnClose', 'Close'))}</button>
             </div>
         `;
 
@@ -2129,8 +2211,10 @@ document.getElementById('btn-apply-settings').onclick = () => {
             card.onclick = () => {
                 const idx = parseInt(card.dataset.idx);
                 options[idx].apply();
-                ParticleSystem.burst(p.centerX, p.centerY, 18, { color: '#ffcc80', life: 0.7, size: 4, speed: 3 });
-                AudioManager.play('pickup');
+                if (window.ParticleSystem && typeof ParticleSystem.burst === 'function') {
+                    ParticleSystem.burst(p.centerX, p.centerY, 18, { color: '#ffcc80', life: 0.7, size: 4, speed: 3 });
+                }
+                if (window.AudioManager && typeof AudioManager.play === 'function') AudioManager.play('pickup');
                 modal.remove();
                 Game.paused = false;
             };
@@ -3003,25 +3087,21 @@ document.getElementById('btn-apply-settings').onclick = () => {
         }
         // Event display
         if (eventRow && eventNameEl && room) {
-            // Event display lookup
-            const eventNames = {
-                'mud': 'Barro', 'meteors': 'Meteoritos', 'toxic_fog': 'Niebla Tóxica',
-                'darkness': 'Oscuridad', 'lightning': 'Rayos', 'ice': 'Hielo',
-                'gravity_wells': 'Pozos de Gravedad', 'spikes': 'Pinchos',
-                'mana_drain': 'Drenaje Maná', 'anti_magic': 'Anti-Magia',
-                'enrage': 'Furia', 'barrels': 'Barriles'
-            };
-
+            // Event display (localized)
             const mods = room.roomModifiers || [];
+            eventRow.style.display = 'flex';
             if (mods.length > 0) {
-                eventRow.style.display = 'flex';
-                // Map ID to name, fallback to ID if missing
-                eventNameEl.textContent = mods.map(m => eventNames[m.id] || m.id).join(', ');
+                const names = mods.map(m => {
+                    const id = (m && m.id) ? m.id : '';
+                    try {
+                        if (window.i18n && typeof window.i18n.roomEvent === 'function') return window.i18n.roomEvent(id);
+                    } catch (e) { }
+                    return id || '---';
+                });
+                eventNameEl.textContent = names.join(', ');
             } else {
-                eventRow.style.display = 'flex';
                 eventNameEl.textContent = '---';
-            }
-        }
+            }        }
 
         // Set bonus display (Top Left)
         try {
@@ -3112,9 +3192,21 @@ document.getElementById('btn-apply-settings').onclick = () => {
                     synergies.forEach(s => {
                         const div = document.createElement('div');
                         div.className = 'synergy-item';
+
+                        // Robust name/desc (synergies use translations via getName/getDesc)
+                        const tr = (window.i18n && typeof window.i18n.synergy === 'function')
+                            ? window.i18n.synergy((s && s.id) ? s.id : '')
+                            : null;
+                        const prettyName = (
+                            (s && typeof s.getName === 'function') ? s.getName() : (tr && tr.name)
+                        ) || (s && s.name) || (s && s.id) || 'Synergy';
+                        const prettyDesc = (
+                            (s && typeof s.getDesc === 'function') ? s.getDesc() : (tr && tr.desc)
+                        ) || (s && s.desc) || '';
+
                         div.innerHTML = `
-                            <div class="syn-name">⚡ ${s.name}</div>
-                            <div class="syn-desc">${s.desc || ''}</div>
+                            <div class="syn-name">⚡ ${prettyName}</div>
+                            <div class="syn-desc">${prettyDesc}</div>
                         `;
                         synList.appendChild(div);
                     });
@@ -3135,7 +3227,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
             if (rune) {
                 el.textContent = rune.icon;
-                el.title = `${rune.name}\n${rune.desc || ''}`;
+                el.title = `${getRuneText(rune).name}\n${getRuneText(rune).desc || ''}`;
             } else {
                 el.title = 'Runa Vacía';
             }
@@ -3358,59 +3450,231 @@ document.getElementById('btn-apply-settings').onclick = () => {
             }
         }
     },
+    
+// Ensure reward screen DOM exists (created lazily so index.html doesn't need it)
+ensureRewardScreenElements() {
+  let screen = document.getElementById('reward-screen');
+  let options = document.getElementById('reward-options');
+  if (!screen) {
+    screen = document.createElement('div');
+    screen.id = 'reward-screen';
+    screen.className = 'hidden';
+    // Minimal inline styles so it works even if CSS is missing
+    screen.style.position = 'fixed';
+    screen.style.inset = '0';
+    screen.style.background = 'rgba(0,0,0,0.65)';
+    screen.style.zIndex = '9999';
+    screen.style.display = 'flex';
+    screen.style.alignItems = 'center';
+    screen.style.justifyContent = 'center';
+
+    const panel = document.createElement('div');
+    panel.style.width = 'min(760px, 92vw)';
+    panel.style.background = 'rgba(10,10,20,0.95)';
+    panel.style.border = '3px solid #f5c400';
+    panel.style.boxShadow = '0 0 0 4px rgba(245,196,0,0.15)';
+    panel.style.padding = '18px 18px 12px';
+    panel.style.fontFamily = '"Press Start 2P", monospace';
+
+    const title = document.createElement('div');
+    title.id = 'reward-title';
+    title.style.color = '#f5c400';
+    title.style.fontSize = '18px';
+    title.style.textAlign = 'center';
+    title.style.marginBottom = '12px';
+
+    const subtitle = document.createElement('div');
+    subtitle.id = 'reward-subtitle';
+    subtitle.style.color = '#eaeaea';
+    subtitle.style.fontSize = '10px';
+    subtitle.style.opacity = '0.9';
+    subtitle.style.textAlign = 'center';
+    subtitle.style.marginBottom = '12px';
+
+    options = document.createElement('div');
+    options.id = 'reward-options';
+    options.style.display = 'flex';
+    options.style.gap = '14px';
+    options.style.justifyContent = 'center';
+    options.style.flexWrap = 'wrap';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.display = 'flex';
+    btnRow.style.justifyContent = 'center';
+    btnRow.style.marginTop = '12px';
+
+    const discard = document.createElement('button');
+    discard.id = 'reward-discard';
+    discard.textContent = 'Skip';
+    discard.style.fontFamily = '"Press Start 2P", monospace';
+    discard.style.fontSize = '10px';
+    discard.style.padding = '10px 14px';
+    discard.style.background = 'rgba(255,255,255,0.06)';
+    discard.style.border = '2px solid rgba(255,255,255,0.25)';
+    discard.style.color = '#ddd';
+    discard.style.cursor = 'pointer';
+
+    btnRow.appendChild(discard);
+    panel.appendChild(title);
+    panel.appendChild(subtitle);
+    panel.appendChild(options);
+    panel.appendChild(btnRow);
+    screen.appendChild(panel);
+    document.body.appendChild(screen);
+  }
+  if (!options) options = document.getElementById('reward-options');
+  return { screen, options };
+    },
 
     showRewardScreen(rewards) {
-        const screen = document.getElementById('reward-screen');
-        const container = document.getElementById('reward-options');
+        // Ensure reward UI exists (some builds don't ship the HTML nodes)
+        let screen = document.getElementById('reward-screen');
+        if (!screen) {
+            screen = document.createElement('div');
+            screen.id = 'reward-screen';
+            screen.className = 'overlay hidden reward-screen';
+            screen.innerHTML = `
+                <div class="reward-content">
+                    <h2 id="reward-title" class="reward-title"></h2>
+                    <div id="reward-options" class="reward-options"></div>
+                </div>
+            `;
+            document.body.appendChild(screen);
+        }
+
+        // HARD FORCE visibility/layout so it works even if CSS is missing or different in TEST builds
+        try {
+            screen.style.position = 'fixed';
+            screen.style.left = '0';
+            screen.style.top = '0';
+            screen.style.width = '100vw';
+            screen.style.height = '100vh';
+            screen.style.display = 'flex';
+            screen.style.alignItems = 'center';
+            screen.style.justifyContent = 'center';
+            screen.style.background = 'rgba(0,0,0,0.72)';
+            screen.style.zIndex = '99999';
+            screen.style.pointerEvents = 'auto';
+        } catch (e) { }
+
+        const content = screen.querySelector('.reward-content') || screen;
+        try {
+            content.style.display = 'flex';
+            content.style.flexDirection = 'column';
+            content.style.alignItems = 'center';
+            content.style.gap = '14px';
+            content.style.maxWidth = '960px';
+            content.style.width = '92vw';
+        } catch (e) { }
+
+        // Title
+        try {
+            const titleEl = document.getElementById('reward-title') || screen.querySelector('#reward-title');
+            const t = (window.i18n && window.i18n.t) ? window.i18n.t('rewardTitle') : null;
+            titleEl.textContent = (t && t !== 'rewardTitle') ? t : 'Rewards';
+        } catch (e) { }
+
+        let container = document.getElementById('reward-options') || screen.querySelector('#reward-options');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'reward-options';
+            container.className = 'reward-options';
+            content.appendChild(container);
+        }
+
+        try {
+            container.style.display = 'grid';
+            container.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+            container.style.gap = '18px';
+            container.style.width = '100%';
+            container.style.justifyItems = 'center';
+        } catch (e) { }
+
+        // Show screen and populate
+        try { screen.classList.remove('hidden'); } catch (e) { }
         container.innerHTML = '';
         this._lastRewardScreenRewards = rewards;
 
-        rewards.forEach((reward, i) => {
+        (rewards || []).forEach((reward) => {
             if (!reward) return;
+
+            const name = reward.name || reward.id || 'Reward';
+            const desc = reward.desc || '';
+
             const card = document.createElement('div');
             card.className = `reward-card ${reward.rarity || 'common'}`;
+            card.style.cursor = 'pointer';
+            card.style.userSelect = 'none';
+            card.style.width = '100%';
+            card.style.maxWidth = '280px';
+            card.style.padding = '16px';
+            card.style.borderRadius = '10px';
+            card.style.background = 'rgba(10,10,20,0.92)';
+            card.style.border = '2px solid rgba(255,255,255,0.12)';
+            card.style.boxShadow = '0 10px 30px rgba(0,0,0,0.35)';
+            card.style.textAlign = 'center';
+
             card.innerHTML = `
-                <div class="reward-icon">${reward.icon}</div>
-                <div class="reward-name">${reward.name}</div>
-                <div class="reward-desc">${reward.desc || ''}</div>
+                <div class="reward-icon" style="font-size:42px; margin-bottom:10px;">${reward.icon || ''}</div>
+                <div class="reward-name" style="font-weight:800; margin-bottom:8px;">${name}</div>
+                <div class="reward-desc" style="opacity:0.85; font-size:14px; line-height:1.25;">${desc}</div>
             `;
+
             card.onclick = () => {
-                Game.selectReward(reward);
-                screen.classList.add('hidden');
+                try {
+                    if (window.Game && typeof Game.selectReward === 'function') {
+                        Game.selectReward(reward);
+                    }
+                } finally {
+                    try { screen.classList.add('hidden'); } catch (e) { }
+                    try { screen.style.display = 'none'; } catch (e) { }
+                    try { if (window.Game) Game.paused = false; } catch (e) { }
+                }
             };
+
             container.appendChild(card);
         });
 
-        
         // Add discard option
         try {
             const discard = document.createElement('button');
             discard.className = 'discard-btn';
-            discard.style.marginTop = '14px';
-            discard.textContent = 'Descartar';
+            discard.id = 'reward-discard-btn';
+            discard.style.marginTop = '6px';
+            discard.style.padding = '10px 16px';
+            discard.style.borderRadius = '10px';
+            discard.style.border = '1px solid rgba(255,255,255,0.16)';
+            discard.style.background = 'rgba(0,0,0,0.3)';
+            discard.style.color = '#fff';
+            discard.style.cursor = 'pointer';
+
+            const dt = (window.i18n && window.i18n.t) ? (window.i18n.t('btnDiscard') || window.i18n.t('discard')) : null;
+            discard.textContent = (dt && dt !== 'btnDiscard') ? dt : 'Discard';
+
             discard.onclick = () => {
-                screen.classList.add('hidden');
-                Game.paused = false;
+                try { screen.classList.add('hidden'); } catch (e) { }
+                try { screen.style.display = 'none'; } catch (e) { }
+                try { if (window.Game) Game.paused = false; } catch (e) { }
             };
-            // avoid duplicates
+
             const existing = screen.querySelector('#reward-discard-btn');
             if (existing) existing.remove();
-            discard.id = 'reward-discard-btn';
-            screen.querySelector('.reward-content')?.appendChild(discard);
-        } catch (e) {}
-screen.classList.remove('hidden');
+            content.appendChild(discard);
+        } catch (e) { }
     },
 
     hideRewardScreen() {
-        document.getElementById('reward-screen').classList.add('hidden');
+        const rs = document.getElementById('reward-screen');
+        try { rs?.classList?.add('hidden'); } catch(e) {}
+        try { if (rs) rs.style.display = 'none'; } catch(e) {}
     },
 
     showLoading() {
-        document.getElementById('loading-screen').classList.remove('hidden');
+        try { document.getElementById('loading-screen')?.classList?.remove('hidden'); } catch(e) {}
     },
 
     hideLoading() {
-        document.getElementById('loading-screen').classList.add('hidden');
+        try { document.getElementById('loading-screen')?.classList?.add('hidden'); } catch(e) {}
     },
 
     // ===========================
@@ -3872,12 +4136,14 @@ root.innerHTML = cards.join('');
         // Title
         ctx.fillStyle = '#ff00ff';
         ctx.font = 'bold 12px monospace';
-        ctx.fillText(`⚡ SINERGIAS ACTIVAS (${synergies.length})`, panelX + 10, panelY + 20);
+        const title = (window.i18n && window.i18n.t) ? window.i18n.t('hudSynergies') : 'SYNERGIES';
+        ctx.fillText(`⚡ ${title} (${synergies.length})`, panelX + 10, panelY + 20);
         
         // Hint
         ctx.fillStyle = '#aaaaaa';
         ctx.font = '8px monospace';
-        ctx.fillText('Presioná B para ocultar', panelX + 10, panelY + 35);
+        const hint = (window.i18n && window.i18n.t) ? window.i18n.t('hudSynergiesHint') : 'Press B to toggle';
+        ctx.fillText(hint, panelX + 10, panelY + 35);
         
         // Synergies list
         ctx.font = '10px monospace';
@@ -3885,15 +4151,18 @@ root.innerHTML = cards.join('');
         
         if (synergies.length === 0) {
             ctx.fillStyle = '#888888';
-            ctx.fillText('No hay sinergias activas', panelX + 10, y);
+            const none = (window.i18n && window.i18n.t) ? window.i18n.t('synergiesNoneTitle') : 'No active synergies';
+            ctx.fillText(none, panelX + 10, y);
         } else {
             for (const synergy of synergies) {
                 ctx.fillStyle = '#ffff00';
-                ctx.fillText(`- ${synergy.name}`, panelX + 10, y);
+                const sName = (synergy && typeof synergy.getName === 'function') ? synergy.getName() : (synergy?.name || (window.i18n && typeof window.i18n.synergy==='function' ? window.i18n.synergy(synergy?.id||'').name : (synergy?.id || 'Synergy')));
+                ctx.fillText(`- ${sName}`, panelX + 10, y);
                 
                 ctx.fillStyle = '#cccccc';
                 ctx.font = '8px monospace';
-                ctx.fillText(synergy.desc, panelX + 20, y + 10);
+                const sDesc = (synergy && typeof synergy.getDesc === 'function') ? synergy.getDesc() : (synergy?.desc || (window.i18n && typeof window.i18n.synergy==='function' ? window.i18n.synergy(synergy?.id||'').desc : ''));
+                ctx.fillText(sDesc, panelX + 20, y + 10);
                 
                 ctx.font = '10px monospace';
                 y += lineHeight;

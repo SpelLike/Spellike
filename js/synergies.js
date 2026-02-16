@@ -309,18 +309,25 @@ const SynergySystem = {
 
     showNewSynergies(player) {
         for (const synergy of this.newSynergiesThisFrame) {
+            const tr = (window.i18n && typeof window.i18n.synergy === 'function')
+                ? window.i18n.synergy((synergy && synergy.id) ? synergy.id : '')
+                : null;
+            const prettyName = (
+                (synergy && typeof synergy.getName === 'function') ? synergy.getName() : (tr && tr.name)
+            ) || (synergy && synergy.name) || (synergy && synergy.id) || 'Synergy';
+
             // Show floating text
             if (window.FloatingTextSystem) {
                 FloatingTextSystem.synergy(
                     player.centerX,
                     player.centerY - 30,
-                    synergy.name
+                    prettyName
                 );
             }
             
             // Show toast
             if (window.UI && typeof UI.showToast === 'function') {
-                UI.showToast(`${i18n.t('toastSynergy')} ${synergy.name}`);
+                UI.showToast(`${i18n.t('toastSynergy')} ${prettyName}`);
             }
             
             // Particles

@@ -991,6 +991,11 @@ const Game = {
             }
         } catch (e) { }
 
+        // Boss reward flow
+        if (enemy && (enemy.isBoss || enemy.bossType)) {
+            try { this.onBossKilled(enemy); } catch (e) { console.error(e); }
+        }
+
         this.shake(3);
     },
 
@@ -1083,8 +1088,25 @@ const Game = {
         const rareRune = getRandomRune('rare');
 
         setTimeout(() => {
-            UI.showRewardScreen([legendaryRune, epicRune, rareRune].filter(r => r));
-            this.paused = true;
+            // Reward screen expects reward objects directly (so UI + selection work)
+            const runes = [
+                legendaryRune ? { ...legendaryRune, type: 'rune', rarity: 'legendary' } : null,
+                epicRune ? { ...epicRune, type: 'rune', rarity: 'epic' } : null,
+                rareRune ? { ...rareRune, type: 'rune', rarity: 'rare' } : null,
+            ].filter(Boolean);
+            const rewards = runes;
+            try {
+                UI.showRewardScreen(rewards);
+                this.paused = true;
+            } catch (e) {
+                console.error('showRewardScreen failed', e);
+                this.paused = false;
+            }
+            // Safety: never freeze the run if the reward screen can't render
+            setTimeout(() => {
+                const rs = document.getElementById('reward-screen');
+                if (this.paused && (!rs || (rs.style.display !== 'block' && rs.style.display !== 'flex'))) this.paused = false;
+            }, 250);
         }, 1200);
 
         setTimeout(() => {

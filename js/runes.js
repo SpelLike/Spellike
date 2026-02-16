@@ -103,6 +103,15 @@ function getRandomRune(rarity) {
         rune.name = trans.name;
         rune.desc = trans.desc;
     }
+        // Ensure UI-friendly fields exist even if we rely on i18n tables
+    try {
+        const t = (typeof getRuneText === 'function') ? getRuneText(rune) : null;
+        if (!rune.name) rune.name = (t && t.name) ? t.name : (rune.id || 'Rune');
+        if (rune.desc == null) rune.desc = (t && t.desc) ? t.desc : '';
+    } catch (e) {
+        if (!rune.name) rune.name = rune.id || 'Rune';
+        if (rune.desc == null) rune.desc = '';
+    }
     return rune;
 }
 
@@ -156,6 +165,15 @@ function getRandomRuneSeeded(rarity, rng) {
         const trans = window.i18n.rune(rune.id);
         rune.name = trans.name;
         rune.desc = trans.desc;
+    }
+        // Ensure UI-friendly fields exist even if we rely on i18n tables
+    try {
+        const t = (typeof getRuneText === 'function') ? getRuneText(rune) : null;
+        if (!rune.name) rune.name = (t && t.name) ? t.name : (rune.id || 'Rune');
+        if (rune.desc == null) rune.desc = (t && t.desc) ? t.desc : '';
+    } catch (e) {
+        if (!rune.name) rune.name = rune.id || 'Rune';
+        if (rune.desc == null) rune.desc = '';
     }
     return rune;
 }

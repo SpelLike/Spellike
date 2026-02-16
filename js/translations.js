@@ -29,7 +29,30 @@ const Translations = {
         // === META UPGRADES ===
         metaTitle: '✨ MEJORAS PERMANENTES',
         btnBack: 'VOLVER',
+        rewardTitle: 'RECOMPENSAS',
+        btnDiscard: 'DESCARTAR',
+        // === SHRINE ===
+        shrine_title: 'SANTUARIO',
+        shrine_subtitle: 'Elige una bendición rápida:',
+        shrine_close: 'Cerrar',
+        shrine_heal_name: 'Sanación',
+        shrine_heal_desc: 'Cura 40% de tu HP máximo',
+        shrine_gold_name: 'Ofrenda',
+        shrine_gold_desc: '+200 oro',
+        shrine_potion_name: 'Frascos',
+        shrine_potion_desc: '+2 pociones',
         toastSynergy: '⚡ SINERGIA:',
+        // === CAMPFIRE ===
+        campfire_title: 'HOGUERA',
+        campfire_subtitle: 'Tomate un respiro y elegí un beneficio:',
+        campfire_close: 'Cerrar',
+        campfire_rest_name: 'Descansar',
+        campfire_rest_desc: 'Cura 35% de tu HP máximo',
+        campfire_sharpen_name: 'Afilado',
+        campfire_sharpen_desc: '+4 daño permanente (run)',
+        campfire_refill_name: 'Reponer',
+        campfire_refill_desc: '+1 poción',
+
         synergiesNoneTitle: 'Sin sinergias activas',
         synergiesNoneDesc: 'Combina runas para activar sinergias.',
         codexTabBestiary: 'Bestiario',
@@ -186,6 +209,7 @@ const Translations = {
         hudSetBonus: 'Bonus de Set',
         hudObjectives: 'OBJETIVOS',
         hudSynergies: 'SINERGIAS',
+        hudSynergiesHint: 'Presioná B para ocultar/mostrar',
         hudItems: 'ITEMS',
         
         // === MINIMAP ===
@@ -225,6 +249,7 @@ const Translations = {
         shopSellHint: 'Elige una Runa o Activo para vender por oro.',
         shopRecycleHint: 'Elige una Runa o Activo para reciclar: obtienes otro de la misma rareza.',
         shopBuy: 'COMPRAR',
+        metaLevel: 'Nivel',
         shopClose: 'Cerrar',
         shopGold: 'Oro',
         shopFull: 'Inventario lleno',
@@ -311,6 +336,10 @@ const Translations = {
         statTime: "Tiempo",
         statsRunesEquipped: "Runas equipadas",
         btnClose: "Cerrar",
+        btnCancel: 'CANCELAR',
+        runeSwapTitle: 'INTERCAMBIAR RUNA',
+        runeSwapNew: 'Nueva:',
+        runeSwapChoose: 'Elige cuál runa reemplazar:',
 
         // === CODEX: SETS & SYNERGIES ===
         codexSetLabel: "Set:",
@@ -350,7 +379,28 @@ const Translations = {
 // === MAIN MENU ===
         gameTitle: 'SpelLike',
         tagline: 'Combine. Conquer. Repeat until death.',
+        // === SHRINE ===
+        shrine_title: 'SHRINE',
+        shrine_subtitle: 'Choose a quick blessing:',
+        shrine_close: 'Close',
+        shrine_heal_name: 'Healing',
+        shrine_heal_desc: 'Heal 40% of your max HP',
+        shrine_gold_name: 'Offering',
+        shrine_gold_desc: '+200 gold',
+        shrine_potion_name: 'Flasks',
+        shrine_potion_desc: '+2 potions',
         btnPlay: 'START GAME',
+        // === CAMPFIRE ===
+        campfire_title: 'CAMPFIRE',
+        campfire_subtitle: 'Take a breath and choose a benefit:',
+        campfire_close: 'Close',
+        campfire_rest_name: 'Rest',
+        campfire_rest_desc: 'Heal 35% of your max HP',
+        campfire_sharpen_name: 'Sharpen',
+        campfire_sharpen_desc: '+4 permanent damage (run)',
+        campfire_refill_name: 'Refill',
+        campfire_refill_desc: '+1 potion',
+
         btnMeta: 'UPGRADES',
         btnSettings: 'SETTINGS',
         btnFeedback: 'FEEDBACK',
@@ -371,6 +421,8 @@ const Translations = {
         // === META UPGRADES ===
         metaTitle: '✨ PERMANENT UPGRADES',
         btnBack: 'BACK',
+        rewardTitle: 'REWARDS',
+        btnDiscard: 'DISCARD',
         toastSynergy: '⚡ SYNERGY:',
         synergiesNoneTitle: 'No active synergies',
         synergiesNoneDesc: 'Combine runes to activate synergies.',
@@ -528,6 +580,7 @@ const Translations = {
         hudSetBonus: 'Set Bonus',
         hudObjectives: 'OBJECTIVES',
         hudSynergies: 'SYNERGIES',
+        hudSynergiesHint: 'Press B to toggle',
         hudItems: 'ITEMS',
         
         // === MINIMAP ===
@@ -566,7 +619,8 @@ const Translations = {
         shopSell: 'Sell',
         shopSellHint: 'Choose a Rune or Active to sell for gold.',
         shopRecycleHint: 'Choose a Rune or Active to recycle: you get another of the same rarity.',
-        shopBuy: 'Buy',
+        shopBuy: 'BUY',
+        metaLevel: 'Level',
         shopClose: 'Close',
         shopGold: 'Gold',
         metaNotAvailable: 'Meta unavailable.',
@@ -602,6 +656,10 @@ const Translations = {
         shopNoRecyclables: "You don't have runes/actives to recycle.",
         btnBack: 'Back',
         btnClose: 'Close',
+        btnCancel: 'CANCEL',
+        runeSwapTitle: 'SWAP RUNE',
+        runeSwapNew: 'New:',
+        runeSwapChoose: 'Choose a rune to replace:',
 
         lootChooseTitle: 'Choose your reward',
         lootRune: 'Rune',
@@ -1141,6 +1199,29 @@ Translations.metaEN = {
 };
 
 // === ROOM TYPES TRANSLATIONS ===
+
+// === ROOM EVENTS (localized names shown on HUD) ===
+Translations.roomEventsES = {
+    darkness: 'Oscuridad',
+    gravity_wells: 'Pozos de gravedad',
+    toxic_fog: 'Niebla tóxica',
+    meteors: 'Meteoritos',
+    mud: 'Barro',
+    ice: 'Hielo',
+    lightning: 'Tormenta eléctrica',
+    curse: 'Maldición'
+};
+Translations.roomEventsEN = {
+    darkness: 'Darkness',
+    gravity_wells: 'Gravity Wells',
+    toxic_fog: 'Toxic Fog',
+    meteors: 'Meteors',
+    mud: 'Mud',
+    ice: 'Ice',
+    lightning: 'Lightning Storm',
+    curse: 'Curse'
+};
+
 Translations.roomTypesES = {
     normal: 'Normal',
     shop: 'Tienda',
@@ -1359,6 +1440,11 @@ rune(id) {
         return Translations[lang][id] || { name: id, desc: '' };
     }
     
+    roomEvent(id) {
+        const lang = this.currentLang === 'es' ? 'roomEventsES' : 'roomEventsEN';
+        return (Translations[lang] && Translations[lang][id]) ? Translations[lang][id] : id;
+    }
+
     mutator(id) {
         const lang = this.currentLang === 'es' ? 'mutatorsES' : 'mutatorsEN';
         return Translations[lang][id] || { name: id, desc: '' };
@@ -1392,3 +1478,12 @@ rune(id) {
 // Create global instance
 window.i18n = new I18n();
 window.Translations = Translations;
+// Compatibility aliases (avoid crashes from old code paths)
+window.I = window.i18n;
+window.I18N = window.i18n;
+window.rt = (key, fallback='') => {
+    try {
+        if (window.i18n && typeof window.i18n.t === 'function') return window.i18n.t(key);
+    } catch(e) {}
+    return fallback || key;
+};
