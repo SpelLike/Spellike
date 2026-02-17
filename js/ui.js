@@ -3674,7 +3674,11 @@ ensureRewardScreenElements() {
     },
 
     hideLoading() {
-        try { document.getElementById('loading-screen')?.classList?.add('hidden'); } catch(e) {}
+        try {
+            const el = document.getElementById('loading-screen');
+            if (el && el.dataset && el.dataset.startupLock === '1') return;
+            el?.classList?.add('hidden');
+        } catch (e) {}
     },
 
     // ===========================

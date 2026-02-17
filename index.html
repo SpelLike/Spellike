@@ -14,10 +14,29 @@
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     
     <!-- TRANSLATION SYSTEM - Load First! -->
-    <script src="js/translations.js?v=13"></script>
+    <script src="js/translations.js?v=14"></script>
 </head>
 
 <body>
+    <!-- Startup Loading Screen (22s) -->
+    <div id="loading-screen" class="loading-screen active" aria-live="polite" aria-label="Loading">
+        <div class="loading-panel">
+            <div class="loading-top"><div class="loading-spinner" aria-hidden="true"></div>
+            </div>
+
+            <div id="loading-text" class="loading-text"><span id="loading-message">Cargando</span><span class="loading-dots" aria-hidden="true"></span></div>
+
+            <div class="loading-bar" aria-hidden="true">
+                <div class="loading-bar-fill"></div>
+            </div>
+
+            <div class="loading-sub" aria-hidden="true">
+                <span id="loading-phase"></span>
+                <span>22s</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Menu Screen -->
     <div id="main-menu" class="screen active">
         <div class="menu-background"></div>
@@ -462,6 +481,7 @@
     </div>
 
     <!-- Load all game scripts -->
+    <script src="js/loading_screen.js?v=1"></script>
     <script src="js/utils.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/sprites.js"></script>

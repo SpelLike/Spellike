@@ -8,6 +8,24 @@ const Translations = {
         // === MAIN MENU ===
         gameTitle: 'SpelLike',
         tagline: 'Combina. Conquista. Repite hasta morir.',
+        loadingSequence: [
+            "Cargando",
+            "Cargando Dungeons",
+            "Cargando Bosses",
+            "Error",
+            "Preguntando a la IA por el error",
+            "La IA no supo responder",
+            "Entro en crisis",
+            "Ayuda por favor",
+            "Ya encontré el error",
+            "Me faltaba un ;",
+            "Dios dame paciencia"
+        ],
+        loadingPhases: [
+            "Inicializando UI",
+            "Cargando assets",
+            "Preparando dungeon"
+        ],
         btnPlay: 'INICIAR PARTIDA',
         btnMeta: 'MEJORAS',
         btnSettings: 'AJUSTES',
@@ -379,6 +397,24 @@ const Translations = {
 // === MAIN MENU ===
         gameTitle: 'SpelLike',
         tagline: 'Combine. Conquer. Repeat until death.',
+        loadingSequence: [
+            "Loading",
+            "Loading Dungeons",
+            "Loading Bosses",
+            "Error",
+            "Asking the AI about the error",
+            "The AI couldn't answer",
+            "Having a meltdown",
+            "Help, please",
+            "Found the error",
+            "I was missing a ;",
+            "God, give me patience"
+        ],
+        loadingPhases: [
+            "Initializing UI",
+            "Loading assets",
+            "Preparing dungeon"
+        ],
         // === SHRINE ===
         shrine_title: 'SHRINE',
         shrine_subtitle: 'Choose a quick blessing:',
