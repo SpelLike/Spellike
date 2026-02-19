@@ -405,10 +405,6 @@ this.register(new Item({
     id: 'mana_font', icon: '⛲',
     type: 'item', rarity: 'epic', manaRegenBonus: 0.6
 }));
-this.register(new Item({
-    id: 'mana_forged', icon: '🔷',
-    type: 'item', rarity: 'rare', manaCostFlat: -1
-}));
 
 // DPS / casting speed
 this.register(new Item({
@@ -536,27 +532,72 @@ this.register(new Item({
         return this.items[id];
     },
 
+    // Check if movement speed is capped (base 180, cap at 270 = +50%)
+    isMoveSpeedCapped() {
+        const p = window.Game && window.Game.player;
+        if (!p) return false;
+        return p.speed >= 270;
+    },
+
+    // Check if fire rate (attack speed) item cap is hit
+    isFireRateCapped() {
+        const p = window.Game && window.Game.player;
+        if (!p) return false;
+        let mult = p.fireRateMult || 1;
+        // fireRateMult < 1 means faster; cap is 0.4x interval = 60% reduction
+        return mult <= 0.40;
+    },
+
+    // Check if projectile speed item cap is hit
+    isProjSpeedCapped() {
+        const p = window.Game && window.Game.player;
+        if (!p) return false;
+        let spd = (p.projectileSpeed || 500) * (p.projectileSpeedMult || 1);
+        return spd >= (p.projectileSpeed || 500) * 2.30;
+    },
+
+    // Filter items based on capped stats
+    _applyCapFilters(itemList) {
+        const movCapped = this.isMoveSpeedCapped();
+        const fireCapped = this.isFireRateCapped();
+        const projCapped = this.isProjSpeedCapped();
+
+        if (!movCapped && !fireCapped && !projCapped) return itemList;
+
+        const filtered = itemList.filter(i => {
+            if (movCapped && i.speedBonus && i.speedBonus > 0) return false;
+            if (fireCapped && i.fireRateBonus && i.fireRateBonus > 0) return false;
+            if (projCapped && i.projectileSpeedBonus && i.projectileSpeedBonus > 0) return false;
+            return true;
+        });
+        return filtered.length > 0 ? filtered : itemList;
+    },
+
     getRandomItem(preferredRarity = 'common') {
-        const itemList = Object.values(this.items).filter(i => !i.shopOnly && i.type !== 'active');
+        let itemList = Object.values(this.items).filter(i => !i.shopOnly && i.type !== 'active');
+        itemList = this._applyCapFilters(itemList);
 
         // Filter by rarity preference
         let filtered = itemList.filter(i => i.rarity === preferredRarity);
         if (filtered.length === 0) {
             filtered = itemList.filter(i => i.rarity === 'common');
         }
+        if (filtered.length === 0) filtered = itemList;
 
         return { ...Utils.randomChoice(filtered) };
     },
 
     // Seeded version for deterministic loot
     getRandomItemSeeded(preferredRarity = 'common', rng) {
-        const itemList = Object.values(this.items).filter(i => !i.shopOnly && i.type !== 'active');
+        let itemList = Object.values(this.items).filter(i => !i.shopOnly && i.type !== 'active');
+        itemList = this._applyCapFilters(itemList);
 
         // Filter by rarity preference
         let filtered = itemList.filter(i => i.rarity === preferredRarity);
         if (filtered.length === 0) {
             filtered = itemList.filter(i => i.rarity === 'common');
         }
+        if (filtered.length === 0) filtered = itemList;
 
         return { ...Utils.seededChoice(rng, filtered) };
     },

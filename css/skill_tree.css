@@ -1,0 +1,487 @@
+/* ==========================================
+   ARCANE DEPTHS – Skill Tree CSS (v1.0)
+   Aesthetic: dark arcane, crystalline purple,
+   luminous gold accents, runic glow.
+   ========================================== */
+
+/* ── SCREEN ───────────────────────────────── */
+#skilltree-screen {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 5000 !important;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    background: #0a0612;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+#skilltree-screen.active { display: flex !important; }
+
+/* Grid-noise background */
+#skilltree-screen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(109,40,217,0.18) 0%, transparent 70%),
+        url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 40L40 0M-10 10L10-10M30 50L50 30' stroke='rgba(90,60,140,0.07)' stroke-width='1'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── HEADER ───────────────────────────────── */
+.st-header {
+    position: relative;
+    z-index: 2;
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid rgba(139,92,246,0.25);
+    background: rgba(10,6,18,0.85);
+    backdrop-filter: blur(8px);
+    flex-shrink: 0;
+}
+
+.st-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.st-title {
+    margin: 0;
+    font-size: clamp(18px, 2vw, 26px);
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #e8d5ff 0%, #a78bfa 50%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+}
+
+.st-essence-display {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(139,92,246,0.12);
+    border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 20px;
+    padding: 5px 14px;
+}
+.st-essence-icon { font-size: 18px; }
+.st-essence-label { font-size: 13px; color: #a78bfa; }
+.st-essence-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffd700;
+    letter-spacing: 1px;
+}
+
+/* ── TABS ─────────────────────────────────── */
+.st-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.st-tab {
+    padding: 6px 22px;
+    border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 6px;
+    background: rgba(139,92,246,0.06);
+    color: #c4b5fd;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+.st-tab:hover {
+    background: rgba(139,92,246,0.18);
+    border-color: #7c3aed;
+    color: #e0d0ff;
+}
+.st-tab.active {
+    background: linear-gradient(135deg, rgba(124,58,237,0.35), rgba(91,33,182,0.25));
+    border-color: #8b5cf6;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(139,92,246,0.30);
+}
+
+/* ── SUBINFO + ZOOM ───────────────────────── */
+.st-subinfo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #7c6fa0;
+}
+.st-zoom-controls { display: flex; gap: 4px; }
+.st-zoom-btn {
+    width: 26px; height: 26px;
+    border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 4px;
+    background: rgba(139,92,246,0.08);
+    color: #c4b5fd;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+}
+.st-zoom-btn:hover { background: rgba(139,92,246,0.22); }
+
+/* ── VIEWPORT ─────────────────────────────── */
+.st-viewport {
+    position: relative;
+    flex: 1;
+    overflow: auto;
+    cursor: grab;
+    z-index: 1;
+    scrollbar-width: thin;
+    scrollbar-color: #7b4dff #1a1a2e;
+}
+.st-viewport:active { cursor: grabbing; }
+
+.st-inner {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    transform-origin: 0 0;
+    transition: transform 0.05s linear;
+}
+
+.st-nodes {
+    position: relative;
+    pointer-events: none;
+}
+
+/* ── NODES ────────────────────────────────── */
+.st-node {
+    position: absolute;
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    border: 2px solid;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: default;
+    pointer-events: all;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    user-select: none;
+    backdrop-filter: blur(4px);
+}
+
+.st-node-tier {
+    position: absolute;
+    top: 2px; left: 4px;
+    font-size: 8px;
+    opacity: 0.5;
+    letter-spacing: 0.5px;
+}
+.st-node-icon {
+    font-size: 22px;
+    line-height: 1;
+    filter: drop-shadow(0 0 6px currentColor);
+    transition: transform 0.2s ease;
+}
+.st-node-name {
+    font-size: 8px;
+    text-align: center;
+    line-height: 1.2;
+    max-width: 68px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 3px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+}
+.st-node-cost {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* States */
+.st-node--owned {
+    background: linear-gradient(135deg, rgba(91,33,182,0.45), rgba(67,20,143,0.35));
+    border-color: #8b5cf6;
+    color: #e0d0ff;
+    box-shadow: 0 0 16px rgba(139,92,246,0.45), inset 0 0 8px rgba(139,92,246,0.15);
+}
+.st-node--owned .st-node-cost { color: #7c3aed; }
+.st-node--owned .st-node-icon { filter: drop-shadow(0 0 8px #a78bfa); }
+
+.st-node--available {
+    background: rgba(20,10,40,0.80);
+    border-color: #6d59a0;
+    color: #c4b5fd;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(139,92,246,0.15);
+}
+.st-node--available:hover {
+    transform: translateY(-3px) scale(1.06);
+    border-color: #a78bfa;
+    box-shadow: 0 0 22px rgba(167,139,250,0.55), 0 4px 12px rgba(0,0,0,0.4);
+}
+.st-node--available:hover .st-node-icon { transform: scale(1.15); }
+.st-node--available .st-node-cost { color: #ffd700; }
+
+.st-node--locked {
+    background: rgba(10,6,18,0.75);
+    border-color: #2d2040;
+    color: #4a3d6a;
+    cursor: not-allowed;
+}
+.st-node--locked .st-node-icon { filter: grayscale(80%) opacity(0.4); }
+
+.st-node--blocked {
+    background: rgba(30,10,10,0.75);
+    border-color: #4a1a1a;
+    color: #6b3333;
+    cursor: not-allowed;
+    position: relative;
+    overflow: hidden;
+}
+.st-node--blocked::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(180,40,40,0.08) 0px, rgba(180,40,40,0.08) 2px,
+        transparent 2px, transparent 8px
+    );
+    pointer-events: none;
+}
+.st-node--blocked .st-node-icon { filter: grayscale(90%) opacity(0.35); }
+.st-node--blocked .st-node-cost { color: #6b3333; }
+
+/* Animations */
+@keyframes st-pop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.25); }
+    70%  { transform: scale(0.95); }
+    100% { transform: scale(1); }
+}
+.st-node--pop { animation: st-pop 0.4s ease forwards; }
+
+@keyframes st-shake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-5px); }
+    40%      { transform: translateX(5px); }
+    60%      { transform: translateX(-4px); }
+    80%      { transform: translateX(4px); }
+}
+.st-node--shake { animation: st-shake 0.45s ease; }
+
+/* Pulse glow for owned nodes */
+@keyframes st-owned-pulse {
+    0%,100% { box-shadow: 0 0 16px rgba(139,92,246,0.45), inset 0 0 8px rgba(139,92,246,0.15); }
+    50%      { box-shadow: 0 0 26px rgba(167,139,250,0.70), inset 0 0 14px rgba(139,92,246,0.25); }
+}
+.st-node--owned { animation: st-owned-pulse 3s ease-in-out infinite; }
+
+/* ── TOOLTIP ──────────────────────────────── */
+.st-tooltip {
+    position: absolute;
+    z-index: 100;
+    width: 230px;
+    background: rgba(12,7,24,0.96);
+    border: 1px solid rgba(139,92,246,0.45);
+    border-radius: 10px;
+    padding: 12px;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 16px rgba(139,92,246,0.18);
+    backdrop-filter: blur(12px);
+    font-size: 12px;
+    color: #c4b5fd;
+    transition: opacity 0.12s;
+}
+.st-tooltip.hidden { opacity: 0; pointer-events: none; }
+
+.tip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.tip-icon { font-size: 18px; }
+.tip-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 700;
+    color: #e0d0ff;
+}
+.tip-state {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+.tip-state.owned   { background: rgba(124,58,237,0.3); color: #a78bfa; border: 1px solid #7c3aed; }
+.tip-state.blocked { background: rgba(180,40,40,0.3); color: #f87171; border: 1px solid #991b1b; }
+.tip-state.locked  { background: rgba(30,20,60,0.5); color: #6b5f8a; border: 1px solid #3d3060; }
+.tip-state.available { background: rgba(180,130,0,0.25); color: #ffd700; border: 1px solid #b8860b; }
+
+.tip-desc {
+    font-size: 11px;
+    color: #9d8fc0;
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+.tip-effects { margin-bottom: 8px; }
+.tip-effect { color: #86efac; font-size: 11px; margin-bottom: 2px; }
+.tip-meta, .tip-excl {
+    font-size: 10px;
+    color: #7c6fa0;
+    margin-bottom: 3px;
+    line-height: 1.35;
+}
+.tip-excl { color: #b45353; }
+.tip-meta-label { color: #9d8fc0; font-weight: 600; }
+.tip-tier {
+    font-size: 10px;
+    color: #4a3d6a;
+    margin-top: 6px;
+    text-align: right;
+    letter-spacing: 1px;
+}
+
+/* ── FOOTER ───────────────────────────────── */
+.st-footer {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-top: 1px solid rgba(139,92,246,0.18);
+    background: rgba(10,6,18,0.85);
+    flex-shrink: 0;
+}
+
+.st-btn-reset {
+    background: rgba(100,20,20,0.4) !important;
+    border-color: rgba(200,50,50,0.4) !important;
+    color: #f87171 !important;
+}
+.st-btn-reset:hover {
+    background: rgba(150,30,30,0.6) !important;
+    border-color: rgba(248,113,113,0.6) !important;
+}
+.st-btn-reset.st-confirm {
+    background: rgba(200,50,50,0.55) !important;
+    border-color: #ef4444 !important;
+    color: #fff !important;
+    animation: st-shake 0.3s ease;
+}
+
+/* ── LEGEND ───────────────────────────────── */
+.st-legend {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 10px;
+}
+.st-legend-item { display: flex; align-items: center; gap: 4px; color: #7c6fa0; }
+.st-legend-dot  {
+    width: 10px; height: 10px; border-radius: 2px;
+    border: 1.5px solid;
+}
+.st-legend-dot.owned   { background: rgba(91,33,182,0.5); border-color: #8b5cf6; }
+.st-legend-dot.avail   { background: rgba(20,10,40,0.8); border-color: #6d59a0; }
+.st-legend-dot.locked  { background: rgba(10,6,18,0.75); border-color: #2d2040; }
+.st-legend-dot.blocked { background: rgba(30,10,10,0.75); border-color: #4a1a1a; }
+
+/* ── RESPONSIVE ───────────────────────────── */
+@media (max-width: 600px) {
+    .st-title { font-size: 14px; }
+    .st-essence-val { font-size: 16px; }
+    .st-tab { padding: 5px 12px; font-size: 11px; }
+}
+
+/* ==== LAYOUT v3.0 – centrado via st-sizer, sin !important en posicion ==== */
+
+/* Viewport: contenedor del arbol */
+#st-viewport, .st-viewport {
+  position: relative;
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 420px;
+  overflow: auto;
+  z-index: 1;
+  cursor: default;
+  display: block;
+  scrollbar-width: thin;
+  scrollbar-color: #7b4dff #1a1a2e;
+}
+
+/* st-sizer: JS lo posiciona con left/top para centrar el arbol escalado.
+   NO tiene !important en top/left para que JS pueda sobreescribirlos. */
+#st-sizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+/* st-inner: siempre en 0,0 dentro del sizer; JS aplica scale transform.
+   NO tiene !important en top/left (CSS normal < inline style de JS). */
+#st-inner, .st-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+}
+
+/* Contenedor de nodos */
+#st-nodes, .st-nodes {
+  position: relative;
+  pointer-events: none;
+}
+
+/* Los nodos reciben eventos */
+.st-node {
+  display: flex;
+  opacity: 1;
+  pointer-events: all;
+  position: absolute;
+}
+
+/* Nodos locked visibles */
+.st-node--locked {
+  opacity: 0.75;
+}
+
+/* Zoom hint */
+.st-zoom-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  color: rgba(180,160,255,0.5);
+  font-size: 11px;
+  pointer-events: none;
+  z-index: 10;
+  font-family: inherit;
+}
+
+/* Scrollbar styling */
+#st-viewport::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#st-viewport::-webkit-scrollbar-track {
+  background: rgba(20,10,40,0.5);
+}
+#st-viewport::-webkit-scrollbar-thumb {
+  background: #7b4dff;
+  border-radius: 3px;
+}

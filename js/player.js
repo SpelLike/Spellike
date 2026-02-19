@@ -141,6 +141,31 @@ class Player extends Entity {
             this.dashRechargeTimer = 0;
         }
         if (this.iFrameTimer > 0) this.iFrameTimer -= dt;
+
+        // Storm Set trail during dash
+        if (this.setStormDash && (this._stormTrailTimer || 0) > 0) {
+            this._stormTrailTimer -= dt;
+            if (window.ParticleSystem) {
+                ParticleSystem.burst(this.centerX + (Math.random()-0.5)*10, this.centerY + (Math.random()-0.5)*10, 3, {
+                    color: Math.random() < 0.5 ? '#00e5ff' : '#b3e5fc', life: 0.3, size: 3, speed: 1.5
+                });
+            }
+        }
+        // Shield: decay over time and visual aura pulse
+        if ((this.shield || 0) > 0 && (this.shieldTimer || 0) > 0) {
+            this.shieldTimer -= dt;
+            if (this.shieldTimer <= 0) {
+                this.shieldTimer = 0;
+                this.shield = 0;
+            } else {
+                // Ambient blue shield sparkle every 0.2s
+                this._shieldPulse = (this._shieldPulse || 0) + dt;
+                if (this._shieldPulse > 0.18) {
+                    this._shieldPulse = 0;
+                    try { ParticleSystem.burst(this.centerX, this.centerY - 4, 3, { color: '#77ccff', life: 0.3, size: 2.5, speed: 1.5 }); } catch(e){}
+                }
+            }
+        }
         if (this.slowTimer > 0) {
             this.slowTimer -= dt;
             if (this.slowTimer <= 0) { this.slowTimer = 0; this.slowMult = 1; }
@@ -256,6 +281,11 @@ class Player extends Entity {
             
             this.mana = Math.min(this.maxMana, this.mana + totalRegen * dt);
         }
+
+        // Skill Tree HP regen
+        if (this.skillTreeHpRegen && this.skillTreeHpRegen > 0 && this.hp < this.maxHp && this.hp > 0) {
+            this.hp = Math.min(this.maxHp, this.hp + this.skillTreeHpRegen * dt);
+        }
     }
 
     // ------------------------------
@@ -274,6 +304,11 @@ class Player extends Entity {
         // Apply synergy bonus
         if (this.synergyBonuses && this.synergyBonuses.manaCost) {
             cost += this.synergyBonuses.manaCost;
+        }
+
+        // Skill Tree mana cost multiplier (e.g. 0.9 = 10% cheaper)
+        if (this.skillTreeManaCostMult && this.skillTreeManaCostMult !== 1) {
+            cost *= this.skillTreeManaCostMult;
         }
 
         // Never allow free shots: mana should always matter for pacing.
@@ -300,15 +335,21 @@ class Player extends Entity {
         }
         
                 // Cap fire rate bonus to +100% max (2x speed => half interval)
-        // In this system bonus is a fraction that reduces interval: 0.5 => 50% interval.
-        bonus = Math.max(0, Math.min(bonus, 0.5));
+        // In this system bonus is a fraction that reduces interval: 0.6 => 60% interval.
+        // Cap at +150% fire rate (2.5x speed => 0.4x interval)
+        bonus = Math.max(0, Math.min(bonus, 0.60));
         interval *= (1 - bonus);
+
+        // Skill Tree fire rate multiplier (skillTreeFireRateMult < 1 = faster)
+        if (this.skillTreeFireRateMult && this.skillTreeFireRateMult !== 1) {
+            interval *= this.skillTreeFireRateMult;
+        }
 
         // Temporary frenzy
         if (this.frenzyTimer > 0) interval *= (this.frenzyFireRateMult || 1);
 
-        // Never allow interval below 50% base (cap at +100% fire rate)
-        interval = Math.max(interval, this.fireRate * 0.5);
+        // Never allow interval below 40% base (cap at +150% fire rate)
+        interval = Math.max(interval, this.fireRate * 0.4);
 
         // Clamp to keep it playable
         return Math.max(0.05, interval);
@@ -328,8 +369,9 @@ class Player extends Entity {
         if (this.synergyBonuses && this.synergyBonuses.speedBonus) {
             spd *= (1 + this.synergyBonuses.speedBonus / 100);
         }
-        
-        return spd;
+        // Cap projectile speed at +130% over base
+        const maxProjectileSpeed = this.projectileSpeed * 2.30;
+        return Math.min(spd, maxProjectileSpeed);
     }
 
     handleInput(camera, canvasRect, scale) {
@@ -355,12 +397,6 @@ class Player extends Entity {
         }
 
         // Dash
-        this.echoBoots = false; // NG relic
-        this.chainCountBonus = 0; // NG relic
-        this.fragmentationCore = false; // NG relic
-        this.brokenClock = false; // NG relic
-        this.precisionLens = false; // NG relic
-        this.eliteCrown = false; // NG relic
         if (Input.isKeyJustPressed('Space') && this.dashCharges > 0 && !this.isDashing) {
             this.dash();
         }
@@ -470,7 +506,12 @@ class Player extends Entity {
         if (this.synergyBonuses && this.synergyBonuses.damageMultiplier) {
             dmg *= this.synergyBonuses.damageMultiplier;
         }
-        
+
+        // Skill Tree damage multiplier
+        if (this.skillTreeDamageMult && this.skillTreeDamageMult !== 1) {
+            dmg *= this.skillTreeDamageMult;
+        }
+
         return Math.floor(dmg);
     }
 
@@ -524,6 +565,21 @@ class Player extends Entity {
             }
         }
         
+        // Apply skill tree crit bonus and lifesteal
+        if (this.skillTreeCritChance) {
+            data.critChance = (data.critChance || 0) + this.skillTreeCritChance;
+        }
+        if (this.skillTreeCritDmgBonus) {
+            data.critDamage = (data.critDamage || 1) + this.skillTreeCritDmgBonus;
+        }
+        if (this.skillTreeLifesteal) {
+            data.lifeSteal = (data.lifeSteal || 0) + this.skillTreeLifesteal;
+        }
+        if (this.skillTreeChainBonus) {
+            // Increase chain count slightly to represent chain probability bonus
+            if (data.chainCount) data.chainCount += Math.floor(this.skillTreeChainBonus * 10);
+        }
+
         return data;
     }
 
@@ -541,23 +597,35 @@ class Player extends Entity {
         this.dashCharges = Math.max(0, (this.dashCharges || 0) - 1);
         this.iFrameTimer = this.dashDuration + 0.1;
 
-        // Tormenta Set Bonus (3 pieces): Dash shoots lightning backwards
+        // Tormenta Set Bonus (3 pieces): Dash shoots lightning in multiple directions
         if (this.setStormDash) {
-            const angle = this.dashDirection.angle() + Math.PI;
-            const dmg = Math.ceil(this.damage * 1.5);
-            const p = ProjectileManager.spawn(
-                this.centerX, this.centerY,
-                angle,
-                dmg,
-                450,
-                300,
-                'player',
-                ['chain'],
-                { chainCount: 3, color: '#00e5ff' }
-            );
-            p.color = '#00e5ff';
-            // Visual flair
-            ParticleSystem.burst(this.centerX, this.centerY, 10, { color: '#00e5ff', speed: 2 });
+            const dashAngle = this.dashDirection.angle();
+            // Fire 3 lightning bolts: backwards + diagonals
+            const angles = [
+                dashAngle + Math.PI,          // straight back
+                dashAngle + Math.PI * 0.75,   // diagonal left
+                dashAngle + Math.PI * 1.25,   // diagonal right
+            ];
+            for (const angle of angles) {
+                const dmg = Math.ceil(this.damage * 1.2);
+                const p = ProjectileManager.spawn(
+                    this.centerX, this.centerY,
+                    angle,
+                    dmg,
+                    420,
+                    350,
+                    'player',
+                    ['chain'],
+                    { chainCount: 2 }
+                );
+                p.color = '#00e5ff';
+                p.sprite = null; // Use color-drawn version for lightning look
+            }
+            // Electric storm burst
+            ParticleSystem.burst(this.centerX, this.centerY, 22, { color: '#00e5ff', life: 0.5, size: 4, speed: 4 });
+            ParticleSystem.burst(this.centerX, this.centerY, 12, { color: '#ffffff', life: 0.25, size: 2, speed: 6 });
+            // Storm trail during dash (set flag)
+            this._stormTrailTimer = this.dashDuration;
         }
 
         AudioManager.play('dash');
@@ -589,7 +657,33 @@ class Player extends Entity {
             if (!rune) continue;
             if (typeof rune.damageTakenMultiplier === 'number') takenMult *= rune.damageTakenMultiplier;
         }
+        // Skill Tree damage reduction
+        if (this.skillTreeDmgReduction) {
+            takenMult *= Math.max(0.1, 1 - this.skillTreeDmgReduction);
+        }
         finalAmount = Math.max(1, Math.floor(finalAmount * takenMult));
+
+        // --- SHIELD ABSORPTION ---
+        if ((this.shield || 0) > 0) {
+            const absorbed = Math.min(this.shield, finalAmount);
+            this.shield -= absorbed;
+            finalAmount -= absorbed;
+            // Visual: blue burst when shield takes hit
+            try { ParticleSystem.burst(this.centerX, this.centerY - 4, 12, { color: '#55aaff', life: 0.35, size: 4, speed: 3 }); } catch(e){}
+            if (finalAmount <= 0) {
+                // Fully absorbed - small iframes but no HP loss
+                this.iFrameTimer = Math.min(this.iFrames, 0.3);
+                return false;
+            }
+        }
+
+        // Phoenix passive: survive lethal hit at 1 HP
+        if (this.skillTreePhoenix && !this.skillTreePhoenixUsed && (this.hp - finalAmount) <= 0 && this.hp > 1) {
+            finalAmount = this.hp - 1;
+            this.skillTreePhoenixUsed = true;
+            // Visual feedback
+            try { ParticleSystem.hit(this.centerX, this.centerY, '#ff9900'); } catch(e){}
+        }
 
         this.hp -= finalAmount;
         this.stats.damageTaken += finalAmount;
@@ -614,11 +708,43 @@ class Player extends Entity {
     }
 
     heal(amount) {
+        const before = this.hp;
         this.hp = Math.min(this.maxHp, this.hp + amount);
+        const healed = this.hp - before;
+
+        // Overheal → blue shield
+        const overheal = amount - healed;
+        if (overheal > 0) {
+            const shieldGain = Math.floor(overheal * 0.75);
+            if (shieldGain > 0) {
+                this.shield = Math.min(60, (this.shield || 0) + shieldGain);
+                this.shieldTimer = Math.max(this.shieldTimer || 0, 4.0);
+                // Blue overheal floating text
+                if (window.FloatingTextSystem) {
+                    FloatingTextSystem.add(
+                        this.centerX + (Math.random() - 0.5) * 20,
+                        this.centerY - 20,
+                        `+${shieldGain}🛡️`,
+                        { color: '#44aaff', fontSize: 14, bold: true, vy: -30, life: 1.4 }
+                    );
+                }
+                // Blue burst particles
+                if (window.ParticleSystem) {
+                    ParticleSystem.burst(this.centerX, this.centerY, 10, {
+                        color: '#44aaff', life: 0.6, size: 3, speed: 2
+                    });
+                }
+            }
+        }
     }
 
     addGold(amount) {
-        const n = Math.max(0, Math.floor(amount || 0));
+        let n = Math.max(0, Math.floor(amount || 0));
+        // Skill Tree gold bonus
+        if (n > 0 && window.SkillTree) {
+            const mods = SkillTree.getModifiers();
+            if (mods.goldPct > 0) n = Math.floor(n * (1 + mods.goldPct));
+        }
         this.gold += n;
         this.stats.goldCollected = (this.stats.goldCollected || 0) + n;
         try {
@@ -767,12 +893,12 @@ class Player extends Entity {
     }
 
     addPassiveItem(item) {
-        // Track passive items for display (max 10)
+        // Track passive items for display (max 20 - enough for all set pieces + items)
         try {
             const already = this.passiveItems.find(p => p && p.id === item.id);
             if (already) return;
         } catch (e) { }
-        if (this.passiveItems.length < 10) {
+        if (this.passiveItems.length < 20) {
             this.passiveItems.push({
                 id: item.id,
                 name: item.name,
@@ -790,7 +916,9 @@ class Player extends Entity {
             this.maxHp += perk.maxHpBonus;
             this.hp += perk.maxHpBonus;
         }
-        if (perk.speedBonus) this.speed += perk.speedBonus;
+        if (perk.speedBonus) {
+            this.speed = Math.min(270, this.speed + perk.speedBonus); // cap at +50% base
+        }
         if (perk.fireRateBonus) this.fireRate *= (1 - perk.fireRateBonus);
     }
 
@@ -810,6 +938,32 @@ class Player extends Entity {
 
         if (sprite) {
             ctx.drawImage(sprite, Math.floor(this.x), Math.floor(this.y));
+        }
+
+        // Shield visual — glowing blue ring that pulses with shield strength
+        if ((this.shield || 0) > 0 && (this.shieldTimer || 0) > 0) {
+            const shieldPct = Math.min(1, this.shield / 45); // normalize against max typical shield
+            const pulse = 0.65 + 0.35 * Math.sin(Date.now() * 0.006);
+            const radius = 14 + shieldPct * 6;
+            const alpha = (0.45 + 0.35 * pulse) * Math.min(1, this.shieldTimer / 1.0);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            // Outer glow
+            const grad = ctx.createRadialGradient(this.centerX, this.centerY, radius - 4, this.centerX, this.centerY, radius + 5);
+            grad.addColorStop(0, 'rgba(80,180,255,0.9)');
+            grad.addColorStop(0.5, 'rgba(40,120,255,0.6)');
+            grad.addColorStop(1, 'rgba(0,60,200,0)');
+            ctx.strokeStyle = `rgba(120,200,255,${0.6 + 0.3 * pulse})`;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(this.centerX, this.centerY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            // Inner fill
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(this.centerX, this.centerY, radius + 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
         }
     }
 }

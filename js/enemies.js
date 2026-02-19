@@ -1323,7 +1323,7 @@ const EliteModPool = [
     { id: 'haste',      abbr: 'HST', apply: (e) => { e.speed *= 1.35; } },
     { id: 'vampiric',   abbr: 'VMP', apply: (e) => { e.vampiricPct = Math.max(e.vampiricPct || 0, 0.35); e.maxHp = Math.floor(e.maxHp * 1.15); e.hp = e.maxHp; } },
     { id: 'molten',     abbr: 'MLT', apply: (e) => { e.explodeOnDeath = true; e.explosionDamage = Math.max(e.explosionDamage || 20, Math.floor(e.damage * 1.2)); e.explosionRadius = Math.max(e.explosionRadius || 60, 90); } },
-    { id: 'reflect',    abbr: 'RFL', apply: (e) => { e.reflectPct = Math.max(e.reflectPct || 0, 0.18); } },
+    { id: 'reflect',    abbr: 'RFL', apply: (e) => { e.reflectPct = Math.max(e.reflectPct || 0, 0.05); } },
     { id: 'shielded',   abbr: 'SHD', apply: (e) => { e.damageTakenMult *= 0.70; } },
     { id: 'juggernaut', abbr: 'JUG', apply: (e) => { e.maxHp = Math.floor(e.maxHp * 1.75); e.hp = e.maxHp; e.damageTakenMult *= 0.90; } },
     { id: 'berserk',    abbr: 'BRK', apply: (e) => { e.damage = Math.floor(e.damage * 1.35); e.speed *= 1.10; } },

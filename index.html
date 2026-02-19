@@ -9,7 +9,9 @@
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/modals.css">
+    <link rel="stylesheet" href="css/tutorial.css">
     <link rel="stylesheet" href="css/meta_upgrades.css">
+    <link rel="stylesheet" href="css/skill_tree.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     
@@ -70,22 +72,14 @@
                 🔊 Activar música: hacé <b>click</b> o presioná <b>una tecla</b>.
             </div>
             <div id="meta-essence" class="meta-essence-inline"><span data-i18n="metaEssence">Esencia</span>: <span id="essence-amount">0</span></div>
-            <div class="version" data-i18n="version">v0.1.3 Early Access</div>
+            <div class="version" data-i18n="version">v0.1.4 Early Access</div>
         </div>
     </div>
 
     <!-- Meta Upgrades Screen -->
-    <div id="meta-screen" class="screen">
-        <div class="menu-background"></div>
-        <div class="screen-header">
-            <h2 data-i18n="metaTitle">✨ MEJORAS PERMANENTES</h2>
-            <div id="meta-screen-essence" class="meta-essence"><span data-i18n="metaEssence">Esencia</span>: <span id="meta-essence-amount">0</span></div>
-        </div>
-        <div id="meta-shop-list" class="meta-shop-list"></div>
-        <div class="screen-footer">
-            <button id="btn-meta-back" class="menu-btn small" data-i18n="btnBack">VOLVER</button>
-        </div>
-    </div>
+    <!-- Skill Tree Screen (replaces old meta upgrades) -->
+    <div id="meta-screen" class="screen"><!-- kept for UI.showScreen compat --></div>
+    <div id="skilltree-screen" class="screen"></div>
 
     <!-- Updates Screen -->
     
@@ -96,6 +90,11 @@
       </div>
 
       <div class="updates-list">
+        <div class="update-entry">
+          <h3 data-i18n="updatesVersion014">v0.1.4 - Early Access</h3>
+          <pre id="updates-notes-014" class="update-notes"></pre>
+        </div>
+
         <div class="update-entry">
           <h3 data-i18n="updatesVersion013">v0.1.3 - Early Access</h3>
           <pre id="updates-notes-013" class="update-notes"></pre>
@@ -494,6 +493,7 @@
     <script src="js/synergies.js"></script>
     <script src="js/items.js"></script>
     <script src="js/enemies.js"></script>
+    <script src="js/boss_attack_pack.js"></script>
     <script src="js/boss.js"></script>
     <script src="js/player.js"></script>
     <script src="js/biomes.js"></script>
@@ -501,6 +501,9 @@
     <script src="js/room.js"></script>
     <script src="js/save.js"></script>
     <script src="js/meta.js"></script>
+    <script src="js/skill_tree_data.js"></script>
+    <script src="js/skill_tree.js"></script>
+    <script src="js/skill_tree_ui.js"></script>
     <script src="js/input.js"></script>
     <script src="js/ui.js?v=13"></script>
     <script src="js/game.js"></script>
@@ -556,6 +559,156 @@
             });
         });
     </script>
+
+<!-- ===== TUTORIAL OVERLAY ===== -->
+<div id="tutorial-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;z-index:2147483647;font-family:Segoe UI,Arial,sans-serif;">
+  <div class="tutorial-box">
+    <div class="tutorial-header">
+      <h2 class="tutorial-title">&#9876; Tutorial</h2>
+      <div class="tutorial-page-indicator">
+        <div class="tutorial-dot active" id="tdot-0"></div>
+        <div class="tutorial-dot" id="tdot-1"></div>
+        <div class="tutorial-dot" id="tdot-2"></div>
+      </div>
+    </div>
+    <div class="tutorial-page active" id="tutorial-page-0">
+      <div class="tutorial-content">
+        <div class="tutorial-text-panel">
+          <h3 class="tutorial-section-title">&#127918; Movimiento</h3>
+          <p class="tutorial-description">Usa el teclado para mover tu personaje. Combina teclas para moverte en diagonal.</p>
+          <ul class="tutorial-keys-list">
+            <li><span class="key-badge">W</span><span class="arrow">&#8594;</span>Mover hacia <strong>arriba</strong></li>
+            <li><span class="key-badge">A</span><span class="arrow">&#8594;</span>Mover hacia la <strong>izquierda</strong></li>
+            <li><span class="key-badge">S</span><span class="arrow">&#8594;</span>Mover hacia <strong>abajo</strong></li>
+            <li><span class="key-badge">D</span><span class="arrow">&#8594;</span>Mover hacia la <strong>derecha</strong></li>
+            <li><span class="key-badge">W+A</span><span class="arrow">&#8594;</span>Diagonal <strong>arriba-izquierda</strong></li>
+            <li><span class="key-badge">W+D</span><span class="arrow">&#8594;</span>Diagonal <strong>arriba-derecha</strong></li>
+            <li><span class="key-badge">S+A</span><span class="arrow">&#8594;</span>Diagonal <strong>abajo-izquierda</strong></li>
+            <li><span class="key-badge">S+D</span><span class="arrow">&#8594;</span>Diagonal <strong>abajo-derecha</strong></li>
+          </ul>
+          <div class="tutorial-note">&#128161; <strong>Tip:</strong> Mantente en movimiento para esquivar proyectiles. &#161;Un jugador quieto es un blanco facil!</div>
+        </div>
+        <div class="tutorial-video-panel"><video id="tvid-0" src="MOVEMENT.mp4" muted loop playsinline></video></div>
+      </div>
+    </div>
+    <div class="tutorial-page" id="tutorial-page-1">
+      <div class="tutorial-content">
+        <div class="tutorial-text-panel">
+          <h3 class="tutorial-section-title">&#128168; Dash</h3>
+          <p class="tutorial-description">El dash es un impulso veloz para esquivar ataques. Durante el dash sos <strong>invulnerable</strong>. Combina movimiento con <span class="key-badge">SPACE</span>:</p>
+          <ul class="tutorial-keys-list">
+            <li><span class="key-badge">W + SPACE</span><span class="arrow">&#8594;</span>Dash hacia <strong>arriba</strong></li>
+            <li><span class="key-badge">S + SPACE</span><span class="arrow">&#8594;</span>Dash hacia <strong>abajo</strong></li>
+            <li><span class="key-badge">A + SPACE</span><span class="arrow">&#8594;</span>Dash hacia la <strong>izquierda</strong></li>
+            <li><span class="key-badge">D + SPACE</span><span class="arrow">&#8594;</span>Dash hacia la <strong>derecha</strong></li>
+            <li><span class="key-badge">Diagonal + SPACE</span><span class="arrow">&#8594;</span>Dash <strong>diagonal</strong></li>
+          </ul>
+          <div class="tutorial-note">&#9201; <strong>Cooldown del Dash: 1.2 segundos.</strong> Despues de usarlo tenes que esperar. &#161;Usalo en los momentos de mayor peligro!</div>
+        </div>
+        <div class="tutorial-video-panel"><video id="tvid-1" src="Dash.mp4" muted loop playsinline></video></div>
+      </div>
+    </div>
+    <div class="tutorial-page" id="tutorial-page-2">
+      <div class="tutorial-content">
+        <div class="tutorial-text-panel">
+          <h3 class="tutorial-section-title">&#10084; Curacion</h3>
+          <p class="tutorial-description">Para recuperar vida usa las <strong>pociones</strong> que encontras en el dungeon.</p>
+          <ul class="tutorial-keys-list">
+            <li><span class="key-badge">Pocion</span><span class="arrow">&#8594;</span>Recuperas vida al <strong>recogerla</strong></li>
+            <li><span class="key-badge">E</span><span class="arrow">&#8594;</span>Usa pociones del <strong>inventario</strong></li>
+          </ul>
+          <div class="tutorial-note">&#9888; <strong>&#161;Importante!</strong> Si ya tenes la <strong>vida al maximo</strong>, las pociones <strong>no tendran efecto</strong>. &#161;Guardalas para cuando realmente las necesitas!</div>
+        </div>
+        <div class="tutorial-video-panel"><video id="tvid-2" src="Life.mp4" muted loop playsinline></video></div>
+      </div>
+    </div>
+    <div class="tutorial-footer">
+      <button class="tutorial-btn-donotshow" id="tutorial-btn-skip">No mostrar mas</button>
+      <div class="tutorial-nav">
+        <button class="tutorial-btn-back" id="tutorial-btn-back" style="display:none">&#8592; Atras</button>
+        <button class="tutorial-btn-next" id="tutorial-btn-next">Siguiente &#8594;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var TutorialManager = (function() {
+    var KEY = 'spellike_tutorial_skip';
+    var page = 0;
+    var total = 3;
+    var TEXTS = {
+        es: {
+            title:'Tutorial',
+            p0_title:'Movimiento', p0_desc:'Usa el teclado para mover tu personaje. Combina teclas para moverte en diagonal.',
+            p0_k:[['W','Mover hacia <strong>arriba</strong>'],['A','Mover hacia la <strong>izquierda</strong>'],['S','Mover hacia <strong>abajo</strong>'],['D','Mover hacia la <strong>derecha</strong>'],['W+A','Diagonal <strong>arriba-izquierda</strong>'],['W+D','Diagonal <strong>arriba-derecha</strong>'],['S+A','Diagonal <strong>abajo-izquierda</strong>'],['S+D','Diagonal <strong>abajo-derecha</strong>']],
+            p0_note:'<strong>Tip:</strong> Mantente en movimiento para esquivar proyectiles. Un jugador quieto es un blanco facil!',
+            p1_title:'Dash', p1_desc:'El dash es un impulso veloz para esquivar ataques. Durante el dash sos <strong>invulnerable</strong>. Combina movimiento con <span class="key-badge">SPACE</span>:',
+            p1_k:[['W + SPACE','Dash hacia <strong>arriba</strong>'],['S + SPACE','Dash hacia <strong>abajo</strong>'],['A + SPACE','Dash hacia la <strong>izquierda</strong>'],['D + SPACE','Dash hacia la <strong>derecha</strong>'],['Diagonal + SPACE','Dash <strong>diagonal</strong>']],
+            p1_note:'<strong>Cooldown del Dash: 1.2 segundos.</strong> Despues de usarlo tenes que esperar. Usalo en los momentos de mayor peligro!',
+            p2_title:'Curacion', p2_desc:'Para recuperar vida usa las <strong>pociones</strong> que encontras en el dungeon.',
+            p2_k:[['Pocion','Recuperas vida al <strong>recogerla</strong>'],['E','Usa pociones del <strong>inventario</strong>']],
+            p2_note:'<strong>Importante!</strong> Si ya tenes la <strong>vida al maximo</strong>, las pociones <strong>no tendran efecto</strong>. Guardalas para cuando las necesitas!',
+            next:'Siguiente', back:'Atras', finish:'Finalizar Tutorial', skip:'No mostrar mas',
+            icon0:'&#127918;', icon1:'&#128168;', icon2:'&#10084;&#65039;', ni0:'&#128161;', ni1:'&#9201;', ni2:'&#9888;&#65039;'
+        },
+        en: {
+            title:'Tutorial',
+            p0_title:'Movement', p0_desc:'Use the keyboard to move your character. Combine keys to move diagonally.',
+            p0_k:[['W','Move <strong>up</strong>'],['A','Move <strong>left</strong>'],['S','Move <strong>down</strong>'],['D','Move <strong>right</strong>'],['W+A','Diagonal <strong>up-left</strong>'],['W+D','Diagonal <strong>up-right</strong>'],['S+A','Diagonal <strong>down-left</strong>'],['S+D','Diagonal <strong>down-right</strong>']],
+            p0_note:'<strong>Tip:</strong> Keep moving to dodge enemy projectiles. A stationary player is an easy target!',
+            p1_title:'Dash', p1_desc:'The dash is a quick burst to dodge attacks. You are <strong>invulnerable</strong> during the dash. Combine movement with <span class="key-badge">SPACE</span>:',
+            p1_k:[['W + SPACE','Dash <strong>up</strong>'],['S + SPACE','Dash <strong>down</strong>'],['A + SPACE','Dash <strong>left</strong>'],['D + SPACE','Dash <strong>right</strong>'],['Diagonal + SPACE','<strong>Diagonal</strong> dash']],
+            p1_note:'<strong>Dash Cooldown: 1.2 seconds.</strong> After using it you must wait. Use it at the most dangerous moments!',
+            p2_title:'Healing', p2_desc:'Use <strong>potions</strong> found in the dungeon to recover health.',
+            p2_k:[['Potion','Recover health by <strong>picking it up</strong>'],['E','Use potions from your <strong>inventory</strong>']],
+            p2_note:'<strong>Important!</strong> If you already have <strong>full health</strong>, potions <strong>will have no effect</strong>. Save them for when you really need them!',
+            next:'Next', back:'Back', finish:'Finish Tutorial', skip:"Don't show again",
+            icon0:'&#127918;', icon1:'&#128168;', icon2:'&#10084;&#65039;', ni0:'&#128161;', ni1:'&#9201;', ni2:'&#9888;&#65039;'
+        }
+    };
+    function getLang(){try{if(window.i18n&&window.i18n.currentLang)return window.i18n.currentLang;}catch(e){}try{var l=localStorage.getItem('spellike_language');if(l==='es'||l==='en')return l;}catch(e){}return 'en';}
+    function T(){return TEXTS[getLang()]||TEXTS.en;}
+    function shouldShow(){if(window.Game&&Game.difficulty&&Game.difficulty!=='normal')return false;try{return localStorage.getItem(KEY)!=='1';}catch(e){return true;}}
+    function renderAll(){
+        var t=T();
+        for(var i=0;i<3;i++){
+            var el=document.getElementById('tutorial-page-'+i); if(!el)continue;
+            var kh=t['p'+i+'_k'].map(function(k){return '<li><span class="key-badge">'+k[0]+'</span><span class="arrow">&#8594;</span>'+k[1]+'</li>';}).join('');
+            el.querySelector('.tutorial-section-title').innerHTML=t['icon'+i]+' '+t['p'+i+'_title'];
+            el.querySelector('.tutorial-description').innerHTML=t['p'+i+'_desc'];
+            el.querySelector('.tutorial-keys-list').innerHTML=kh;
+            el.querySelector('.tutorial-note').innerHTML=t['ni'+i]+' '+t['p'+i+'_note'];
+        }
+        var tEl=document.querySelector('#tutorial-overlay .tutorial-title'); if(tEl)tEl.innerHTML='&#9876; '+t.title;
+        var sEl=document.getElementById('tutorial-btn-skip'); if(sEl)sEl.textContent=t.skip;
+    }
+    function updateNav(){
+        var t=T();
+        var bb=document.getElementById('tutorial-btn-back'); var bn=document.getElementById('tutorial-btn-next');
+        if(bb){bb.style.display=page===0?'none':'inline-flex';bb.innerHTML='&#8592; '+t.back;}
+        if(bn){bn.textContent=page===total-1?t.finish:t.next+' →';bn.className='tutorial-btn-next'+(page===total-1?' finish':'');}
+    }
+    function show(){if(!shouldShow())return;var el=document.getElementById('tutorial-overlay');if(!el)return;renderAll();el.style.display='flex';goToPage(0);}
+    function hide(){var el=document.getElementById('tutorial-overlay');if(el)el.style.display='none';for(var i=0;i<3;i++){var v=document.getElementById('tvid-'+i);if(v){v.pause();v.currentTime=0;}}}
+    function isOpen(){var el=document.getElementById('tutorial-overlay');return el&&el.style.display!=='none';}
+    function goToPage(index){
+        if(index<0||index>=total)return; page=index;
+        for(var i=0;i<total;i++){var p=document.getElementById('tutorial-page-'+i);var d=document.getElementById('tdot-'+i);if(p)p.className='tutorial-page'+(i===index?' active':'');if(d)d.className='tutorial-dot'+(i===index?' active':'');}
+        updateNav();
+        for(var j=0;j<total;j++){var v=document.getElementById('tvid-'+j);if(v&&j!==index){v.pause();v.currentTime=0;}}
+        var vid=document.getElementById('tvid-'+index);
+        if(vid){vid.muted=true;vid.loop=true;var pr=vid.play();if(pr)pr.catch(function(){var fn=function(){vid.play().catch(function(){});document.removeEventListener('click',fn);};document.addEventListener('click',fn);});}
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+        document.getElementById('tutorial-btn-next').addEventListener('click',function(){if(window.AudioManager)AudioManager.play('menuClick');if(page<total-1)goToPage(page+1);else hide();});
+        document.getElementById('tutorial-btn-back').addEventListener('click',function(){if(window.AudioManager)AudioManager.play('menuClick');if(page>0)goToPage(page-1);});
+        document.getElementById('tutorial-btn-skip').addEventListener('click',function(){if(window.AudioManager)AudioManager.play('menuClick');try{localStorage.setItem(KEY,'1');}catch(e){}hide();});
+    });
+    return {show:show,hide:hide,isOpen:isOpen,shouldShow:shouldShow};
+})();
+</script>
+
 </body>
 
 </html>

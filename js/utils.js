@@ -133,6 +133,12 @@ const Utils = {
         // Void Touch max stacks = 2
         if (rune.id === 'void_touch' && this.countRune(player, 'void_touch') >= 2) return true;
 
+        // Respect maxStacks property on any rune (e.g., godslayer maxStacks: 1)
+        if (typeof rune.maxStacks === 'number' && rune.maxStacks > 0) {
+            const current = this.countRune(player, rune.id);
+            if (current >= rune.maxStacks) return true;
+        }
+
         // Fire rate cap: exclude ONLY pure fire rate runes
         if (this.isFireRateCapped(player) && this.isPureFireRateRune(rune)) return true;
 

@@ -28,6 +28,9 @@ class Room {
         this.director = null;
         this.traps = []; // enemy trapper mines
         this.lavaPools = []; // boss mutation hazards
+        this.bossNests = []; // destroyable spawn nodes (boss attacks)
+        this._bossMeteorDrops = []; // meteor warnings that can create nests
+        this._bossNestSeq = 1;
 
         // Negative room modifiers (hazards) - applied when entering room
         this.roomModifiers = [];
@@ -189,6 +192,163 @@ drawBossStrikes(ctx) {
     ctx.restore();
 }
 
+addBossMeteorDrop(opts = {}) {
+    const x = Utils.clamp(opts.x || (this.bounds.x + this.bounds.width / 2), this.bounds.x + 30, this.bounds.x + this.bounds.width - 30);
+    const y = Utils.clamp(opts.y || (this.bounds.y + this.bounds.height / 2), this.bounds.y + 40, this.bounds.y + this.bounds.height - 30);
+    const r = Math.max(18, opts.r || 50);
+    const warn = Math.max(0.45, opts.warn || 1.0);
+    this._bossMeteorDrops.push({
+        x, y, r,
+        t: warn,
+        total: warn,
+        damage: Math.max(1, opts.damage || 14),
+        nest: opts.nest || null
+    });
+}
+
+addBossNest(x, y, nest = {}) {
+    const id = this._bossNestSeq++;
+    const node = {
+        id,
+        x: Utils.clamp(x, this.bounds.x + 30, this.bounds.x + this.bounds.width - 30),
+        y: Utils.clamp(y, this.bounds.y + 40, this.bounds.y + this.bounds.height - 30),
+        r: Math.max(18, nest.r || 26),
+        hp: Math.max(20, Math.floor(nest.hp || 220)),
+        maxHp: Math.max(20, Math.floor(nest.hp || 220)),
+        spawnEvery: Math.max(1.5, nest.spawnEvery || 3.0),
+        timer: Math.max(0.4, Math.min(2.0, (nest.spawnEvery || 3.0) * 0.6)),
+        spawnRange: Math.max(45, nest.spawnRange || 115),
+        maxMobs: Math.max(1, Math.floor(nest.maxMobs || 6)),
+        globalCap: Math.max(2, Math.floor(nest.globalCap || 12)),
+        pool: Array.isArray(nest.pool) && nest.pool.length ? nest.pool.slice() : ['skeleton', 'charger', 'mage'],
+        label: nest.label || 'Nido',
+        active: true
+    };
+    this.bossNests.push(node);
+    return node;
+}
+
+damageBossNestAt(x, y, damage = 0) {
+    if (!this.bossNests || this.bossNests.length === 0) return false;
+    for (const n of this.bossNests) {
+        if (!n || !n.active) continue;
+        const d = Utils.distance(x, y, n.x, n.y);
+        if (d <= n.r + 6) {
+            n.hp -= Math.max(1, Math.floor(damage || 1));
+            try { ParticleSystem.burst(n.x, n.y, 4, { color: '#ffe082', life: 0.25, size: 2, speed: 2 }); } catch (e) {}
+            if (n.hp <= 0) {
+                n.active = false;
+                try { ParticleSystem.burst(n.x, n.y, 20, { color: '#ff8a65', life: 0.5, size: 4, speed: 3 }); } catch (e) {}
+                try { AudioManager.play('hit'); } catch (e) {}
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+updateBossMeteorDrops(dt, player) {
+    if (!this._bossMeteorDrops || this._bossMeteorDrops.length === 0) return;
+    for (let i = this._bossMeteorDrops.length - 1; i >= 0; i--) {
+        const m = this._bossMeteorDrops[i];
+        m.t -= dt;
+        if (m.t > 0) continue;
+        this._bossMeteorDrops.splice(i, 1);
+        this.explodeAt(m.x, m.y, m.r + 28, m.damage || 14, player, { source: 'boss_meteor' });
+        if (m.nest) this.addBossNest(m.x, m.y, m.nest);
+    }
+}
+
+updateBossNests(dt, player) {
+    if (!this.bossNests || this.bossNests.length === 0) return;
+    let activeNestMobs = this.enemies.filter(e => e && e.active && e._fromBossNest).length;
+
+    for (const n of this.bossNests) {
+        if (!n || !n.active) continue;
+        n.timer -= dt;
+        if (n.timer > 0) continue;
+        n.timer = n.spawnEvery;
+
+        const localCount = this.enemies.filter(e => e && e.active && e._fromBossNest && e._bossNestId === n.id).length;
+        if (localCount >= n.maxMobs) continue;
+        if (activeNestMobs >= n.globalCap) continue;
+
+        const t = Utils.randomChoice(n.pool);
+        const a = Math.random() * Math.PI * 2;
+        const d = 32 + Math.random() * n.spawnRange;
+        const x = Utils.clamp(n.x + Math.cos(a) * d, this.bounds.x + 26, this.bounds.x + this.bounds.width - 26);
+        const y = Utils.clamp(n.y + Math.sin(a) * d, this.bounds.y + 34, this.bounds.y + this.bounds.height - 24);
+        const e = createEnemy(t, x, y, 0.75 + ((window.Game && Game.ngPlusLevel) ? Game.ngPlusLevel * 0.08 : 0));
+        if (!e) continue;
+        e._fromBossNest = true;
+        e._bossNestId = n.id;
+        e.spawnInvuln = Math.max(e.spawnInvuln || 0, 0.35);
+        this.enemies.push(e);
+        activeNestMobs++;
+        try { ParticleSystem.burst(n.x, n.y, 8, { color: '#ffcc80', life: 0.35, size: 3, speed: 2 }); } catch (err) {}
+    }
+
+    this.bossNests = this.bossNests.filter(n => n && n.active);
+}
+
+drawBossMeteorDrops(ctx) {
+    if (!this._bossMeteorDrops || this._bossMeteorDrops.length === 0) return;
+    ctx.save();
+    for (const m of this._bossMeteorDrops) {
+        const p = Math.max(0, Math.min(1, m.t / Math.max(0.001, m.total)));
+        ctx.globalAlpha = 0.25 + (1 - p) * 0.35;
+        ctx.fillStyle = 'rgba(30,30,30,0.65)';
+        ctx.beginPath();
+        ctx.ellipse(m.x + 6, m.y + 9, m.r * 0.9, m.r * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.3 + (1 - p) * 0.45;
+        ctx.strokeStyle = 'rgba(255,120,80,0.95)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffd180';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.max(0, m.t).toFixed(1)}s`, m.x, m.y + 3);
+    }
+    ctx.restore();
+}
+
+drawBossNests(ctx) {
+    if (!this.bossNests || this.bossNests.length === 0) return;
+    const t = Date.now() * 0.004;
+    ctx.save();
+    for (const n of this.bossNests) {
+        if (!n || !n.active) continue;
+        const pulse = 0.84 + 0.16 * Math.sin(t + n.id);
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = 'rgba(80,30,20,0.85)';
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,150,90,0.95)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        const w = 42;
+        const h = 6;
+        const hpPct = Math.max(0, Math.min(1, n.hp / Math.max(1, n.maxHp)));
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(n.x - w / 2, n.y - n.r - 15, w, h);
+        ctx.fillStyle = '#ff7043';
+        ctx.fillRect(n.x - w / 2 + 1, n.y - n.r - 14, (w - 2) * hpPct, h - 2);
+        ctx.fillStyle = '#ffd180';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.label || 'Nido', n.x, n.y + 3);
+    }
+    ctx.restore();
+}
+
 addBossAntiMagicZone(x, y, r = 110, duration = 2.2) {
     if (!this._bossAntiMagic) this._bossAntiMagic = [];
     this._bossAntiMagic.push({ x, y, r, t: duration });
@@ -257,6 +417,8 @@ isPlayerInAntiMagic(player) {
             height: 34,
             theme: 'blackmarket',
             rerollsLeft: 1,
+            recyclesLeft: 1,
+            recycleCostBase: 0,
             inventory: []
         };
 
@@ -300,7 +462,7 @@ isPlayerInAntiMagic(player) {
         if (this.type !== 'combat' && this.type !== 'elite' && this.type !== 'miniboss') return;
         if (this._eventSpawned) return;
 
-        const chance = 0.18;
+        const chance = 0.30;
         if (Math.random() > chance) return;
 
         this._eventSpawned = true;
@@ -317,8 +479,11 @@ isPlayerInAntiMagic(player) {
             this.bounds.y + this.bounds.height - 88
         );
 
-        const pool = ['shrine', 'shrine', 'campfire', 'campfire', 'pact'];
-        try { if (window.Game && Game.difficulty === 'demonic') pool.push('pact'); } catch (e) { }
+        const pool = ['shrine', 'shrine', 'campfire', 'campfire', 'pact', 'pact'];
+        try {
+            if (window.Game && Game.difficulty === 'demonic') pool.push('pact', 'pact');
+            if (window.Game && (Game.bossKillsThisRun || 0) >= 2) pool.push('forge');
+        } catch (e) {}
         const kind = Utils.randomChoice(pool);
 
         this.events.push({
@@ -389,6 +554,8 @@ isPlayerInAntiMagic(player) {
             height: 32,
             theme: 'shop',
             rerollsLeft: (window.Meta && typeof Meta.getShopRerolls === 'function') ? Meta.getShopRerolls() : 1,
+            recyclesLeft: 1,
+            recycleCostBase: 0,
             allowReroll: true,
             allowLock: true,
             inventory: []
@@ -1108,6 +1275,8 @@ drawRoomModifiers(ctx, player) {
         this.updateTraps(dt, player);
         this.updateBossAntiMagic(dt);
         this.updateBossStrikes(dt, player);
+        this.updateBossMeteorDrops(dt, player);
+        this.updateBossNests(dt, player);
 
         // Lava pools (boss mutations)
         if (this.lavaPools && this.lavaPools.length) {
@@ -1234,6 +1403,8 @@ drawRoomModifiers(ctx, player) {
         // Enemy traps + boss telegraphs + boss lava
         try { this.drawTraps(ctx); } catch (e) {}
         try { this.drawBossStrikes(ctx); } catch (e) {}
+        try { this.drawBossMeteorDrops(ctx); } catch (e) {}
+        try { this.drawBossNests(ctx); } catch (e) {}
         try {
             if (this._bossAntiMagic && this._bossAntiMagic.length) {
                 ctx.save();

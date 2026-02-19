@@ -47,8 +47,8 @@ class Projectile extends Entity {
         this.isChild = runeData.isChild || false;
         this._splitDone = false;
 
-        // Critical hit
-        this.canCrit = effects.includes('crit');
+        // Critical hit - enable if rune has 'crit' effect OR skill tree granted crit chance
+        this.canCrit = effects.includes('crit') || (runeData.critChance && runeData.critChance > 0);
         this.critChance = runeData.critChance || 0.25;
         this.critDamage = runeData.critDamage || 3;
         this.isCrit = false;
@@ -63,6 +63,11 @@ class Projectile extends Entity {
         this.bossMultiplier = runeData.bossMultiplier || 1;
 
         this.hitTargets = new Set();
+
+        // Bounce (reflect off walls or enemies)
+        this.bounceCount = runeData.bounceCount || 0;
+        this.bounceRemaining = this.bounceCount;
+        this._hasBounced = false; // visual trail flag
 
         // Apply crit roll at spawn
         if (this.canCrit && Math.random() < this.critChance) {
@@ -108,6 +113,12 @@ class Projectile extends Entity {
         // Trail particles
         if (this.isCrit) {
             ParticleSystem.magic(this.centerX, this.centerY, '#ffff00');
+        } else if (this.bounceCount > 0) {
+            // Electric bouncing trail effect
+            ParticleSystem.magic(this.centerX, this.centerY, '#44ffee');
+            if (Math.random() < 0.3) {
+                ParticleSystem.magic(this.centerX + (Math.random()-0.5)*8, this.centerY + (Math.random()-0.5)*8, '#aaffee');
+            }
         } else {
             ParticleSystem.magic(this.centerX, this.centerY, this.color);
         }
@@ -197,13 +208,15 @@ class Projectile extends Entity {
             FloatingTextSystem.critical(target.centerX, target.centerY - 10);
         }
 
-        // Elite mod: Reflect (returns a portion of damage to the player)
+        // Elite mod: Reflect — daño FIJO, no escala con el daño del jugador
+        // 8 de daño plano, cooldown 0.8s por enemigo para que no sea un instakill en endgame
         if (this.owner === 'player' && target.reflectPct > 0 && Game.player) {
-            const raw = Math.floor(finalDamage * target.reflectPct);
-            const cap = Math.max(6, Math.floor(Game.player.maxHp * 0.20));
-            const rd = Math.min(cap, Math.max(1, raw));
-            Game.player.takeDamage(rd);
-            ParticleSystem.burst(Game.player.centerX, Game.player.centerY, 4, { color: '#ffd54f', life: 0.25, size: 3, speed: 2 });
+            const now = Date.now();
+            if (!target._reflectCooldownUntil || now >= target._reflectCooldownUntil) {
+                target._reflectCooldownUntil = now + 800;
+                Game.player.takeDamage(8);
+                ParticleSystem.burst(Game.player.centerX, Game.player.centerY, 4, { color: '#ffd54f', life: 0.25, size: 3, speed: 2 });
+            }
         }
 
         // Biome variant: Thorned (small counter-shot)
@@ -291,6 +304,29 @@ class Projectile extends Entity {
                 }
             }
             // Infinite pierce (pierceCount = 999) never deactivates from pierce
+        } else if (this.bounceRemaining > 0 && allEnemies) {
+            // Bounce to nearest enemy not yet hit
+            let nearest = null, nearestDist = Infinity;
+            for (const e of allEnemies) {
+                if (!e.active || this.hitTargets.has(e)) continue;
+                const d = Utils.distance(this.centerX, this.centerY, e.centerX, e.centerY);
+                if (d < nearestDist) { nearestDist = d; nearest = e; }
+            }
+            this.bounceRemaining--;
+            if (nearest) {
+                this.angle = Utils.angle(this.centerX, this.centerY, nearest.centerX, nearest.centerY);
+            } else {
+                // Reflect off current direction if no target
+                this.angle = this.angle + Math.PI * (0.5 + Math.random() * 0.5);
+            }
+            this.vx = Math.cos(this.angle) * this.speed;
+            this.vy = Math.sin(this.angle) * this.speed;
+            this.startX = this.x; this.startY = this.y;
+            this.hitTargets.clear();
+            this.hitTargets.add(target); // don't immediately re-hit same target
+            ParticleSystem.burst(target.centerX, target.centerY, 8, {
+                color: '#44ffee', life: 0.25, size: 3, speed: 2
+            });
         } else {
             this.active = false;
         }
@@ -426,8 +462,18 @@ class Projectile extends Entity {
 
 const ProjectileManager = {
     projectiles: [],
+    maxTotalProjectiles: (window.BossAttackPack && BossAttackPack.limits && BossAttackPack.limits.maxProjectilesTotal) || 220,
+    maxEnemyProjectiles: (window.BossAttackPack && BossAttackPack.limits && BossAttackPack.limits.maxEnemyProjectiles) || 150,
+    maxPlayerProjectiles: (window.BossAttackPack && BossAttackPack.limits && BossAttackPack.limits.maxPlayerProjectiles) || 90,
 
     spawn(x, y, angle, damage, speed, range, owner, effects = [], runeData = {}) {
+        if (this.projectiles.length >= this.maxTotalProjectiles) return null;
+        let ownerCount = 0;
+        for (const p of this.projectiles) {
+            if (p && p.active && p.owner === owner) ownerCount++;
+        }
+        if (owner === 'enemy' && ownerCount >= this.maxEnemyProjectiles) return null;
+        if (owner === 'player' && ownerCount >= this.maxPlayerProjectiles) return null;
         const proj = new Projectile(x, y, angle, damage, speed, range, owner, effects, runeData);
         this.projectiles.push(proj);
         return proj;
@@ -449,9 +495,33 @@ const ProjectileManager = {
                 } catch (e) { }
             }
 
-            // Check room bounds
+            // Check room bounds — bouncing projectiles reflect off walls
             if (room && !Utils.rectCollision(proj.bounds, room.bounds)) {
-                proj.active = false;
+                if (proj.bounceRemaining > 0) {
+                    // Determine which wall was hit and reflect
+                    const rb = room.bounds;
+                    if (proj.x < rb.x || proj.x + proj.width > rb.x + rb.width) {
+                        proj.vx = -proj.vx;
+                        proj.angle = Math.atan2(proj.vy, proj.vx);
+                        proj.x = Utils.clamp(proj.x, rb.x + 2, rb.x + rb.width - proj.width - 2);
+                    }
+                    if (proj.y < rb.y || proj.y + proj.height > rb.y + rb.height) {
+                        proj.vy = -proj.vy;
+                        proj.angle = Math.atan2(proj.vy, proj.vx);
+                        proj.y = Utils.clamp(proj.y, rb.y + 2, rb.y + rb.height - proj.height - 2);
+                    }
+                    proj.bounceRemaining--;
+                    proj.hitTargets.clear(); // can hit same enemy again after bounce
+                    // Reset start position to extend range
+                    proj.startX = proj.x;
+                    proj.startY = proj.y;
+                    // Visual bounce flash
+                    ParticleSystem.burst(proj.centerX, proj.centerY, 8, {
+                        color: '#44ffee', life: 0.25, size: 3, speed: 2
+                    });
+                } else {
+                    proj.active = false;
+                }
             }
 
             // Room modifier: explosive barrels
@@ -470,7 +540,14 @@ const ProjectileManager = {
 
             // Collision detection
             if (proj.owner === 'player') {
+                if (room && typeof room.damageBossNestAt === 'function' && proj.active) {
+                    const hitNest = room.damageBossNestAt(proj.centerX, proj.centerY, Math.max(1, proj.damage));
+                    if (hitNest) {
+                        proj.active = false;
+                    }
+                }
                 for (const enemy of enemies) {
+                    if (!proj.active) break;
                     if (enemy.active && proj.collidesWith(enemy)) {
                         proj.onHit(enemy, enemies);
                     }

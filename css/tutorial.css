@@ -1,0 +1,297 @@
+/* ===== TUTORIAL OVERLAY ===== */
+#tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+#tutorial-overlay.hidden {
+    display: none;
+}
+
+.tutorial-box {
+    background: linear-gradient(160deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%);
+    border: 2px solid #e94560;
+    border-radius: 16px;
+    width: min(900px, 95vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(233, 69, 96, 0.3), 0 0 120px rgba(15, 52, 96, 0.5);
+}
+
+/* HEADER */
+.tutorial-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid rgba(233, 69, 96, 0.3);
+    background: rgba(233, 69, 96, 0.08);
+}
+
+.tutorial-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #e94560;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 20px rgba(233, 69, 96, 0.6);
+    margin: 0;
+}
+
+.tutorial-page-indicator {
+    display: flex;
+    gap: 8px;
+}
+
+.tutorial-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    transition: all 0.3s;
+    cursor: default;
+}
+
+.tutorial-dot.active {
+    background: #e94560;
+    border-color: #e94560;
+    box-shadow: 0 0 8px rgba(233, 69, 96, 0.8);
+}
+
+/* CONTENT */
+.tutorial-content {
+    display: flex;
+    flex: 1;
+    gap: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* TEXT SIDE */
+.tutorial-text-panel {
+    flex: 1;
+    padding: 28px 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow-y: auto;
+    min-width: 0;
+}
+
+.tutorial-section-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #f0c040;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 0 0 16px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(240, 192, 64, 0.25);
+    text-shadow: 0 0 12px rgba(240, 192, 64, 0.4);
+}
+
+.tutorial-description {
+    color: #c8d8e8;
+    font-size: 0.92rem;
+    line-height: 1.65;
+    margin-bottom: 20px;
+}
+
+.tutorial-keys-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tutorial-keys-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #c8d8e8;
+    font-size: 0.88rem;
+}
+
+.tutorial-keys-list li .arrow {
+    color: #7ec8e3;
+    font-size: 1rem;
+}
+
+.key-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(233, 69, 96, 0.15);
+    border: 1px solid rgba(233, 69, 96, 0.5);
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #e94560;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    min-width: 36px;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(233, 69, 96, 0.2);
+    font-family: 'Courier New', monospace;
+}
+
+.tutorial-note {
+    background: rgba(240, 192, 64, 0.08);
+    border-left: 3px solid #f0c040;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    color: #f0c040;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    margin-top: 10px;
+}
+
+.tutorial-note strong {
+    color: #ffe066;
+}
+
+/* VIDEO SIDE */
+.tutorial-video-panel {
+    width: 340px;
+    min-width: 240px;
+    background: rgba(0,0,0,0.4);
+    border-left: 1px solid rgba(233, 69, 96, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    flex-shrink: 0;
+}
+
+.tutorial-video-panel video {
+    width: 100%;
+    max-height: 320px;
+    border-radius: 10px;
+    border: 1px solid rgba(233, 69, 96, 0.3);
+    box-shadow: 0 0 30px rgba(0,0,0,0.6);
+    object-fit: contain;
+    background: #000;
+    display: block;
+}
+
+/* FOOTER */
+.tutorial-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-top: 1px solid rgba(233, 69, 96, 0.2);
+    background: rgba(0,0,0,0.2);
+    gap: 12px;
+}
+
+.tutorial-btn-donotshow {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.45);
+    font-size: 0.78rem;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+}
+
+.tutorial-btn-donotshow:hover {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.7);
+    border-color: rgba(255,255,255,0.35);
+}
+
+.tutorial-nav {
+    display: flex;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.tutorial-btn-back,
+.tutorial-btn-next {
+    padding: 9px 22px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    border: none;
+    outline: none;
+}
+
+.tutorial-btn-back {
+    background: rgba(255,255,255,0.08);
+    color: #c8d8e8;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.tutorial-btn-back:hover {
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+}
+
+.tutorial-btn-next {
+    background: linear-gradient(135deg, #e94560, #c0183a);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+}
+
+.tutorial-btn-next:hover {
+    background: linear-gradient(135deg, #ff5a77, #e94560);
+    box-shadow: 0 4px 20px rgba(233, 69, 96, 0.6);
+    transform: translateY(-1px);
+}
+
+.tutorial-btn-next.finish {
+    background: linear-gradient(135deg, #4caf50, #2d8f30);
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+}
+
+.tutorial-btn-next.finish:hover {
+    background: linear-gradient(135deg, #66bb6a, #4caf50);
+    box-shadow: 0 4px 20px rgba(76, 175, 80, 0.6);
+}
+
+/* PAGE SLIDE TRANSITION */
+.tutorial-page {
+    display: none;
+}
+.tutorial-page.active {
+    display: flex;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .tutorial-content {
+        flex-direction: column-reverse;
+    }
+    .tutorial-video-panel {
+        width: 100%;
+        min-width: unset;
+        border-left: none;
+        border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+        padding: 14px;
+    }
+    .tutorial-video-panel video {
+        max-height: 180px;
+    }
+    .tutorial-text-panel {
+        padding: 18px 18px;
+    }
+}

@@ -161,6 +161,10 @@ class Dungeon {
                 if (typeof e.goldValue === 'number') {
                     e.goldValue = Math.floor(e.goldValue * 1.5);
                 }
+                // CAMBIO 12: Aplicar modificadores elite
+                if (typeof applyEliteModifiers === 'function') {
+                    applyEliteModifiers(e, { roomIndex: step, ng: this.ngPlusLevel });
+                }
             }
         } else if (roomType === 'miniboss') {
             const miniType = Utils.randomChoice(enemies);
@@ -180,15 +184,33 @@ class Dungeon {
     getEnemiesForRoom(baseEnemies, roomStep) {
         let enemies = [...baseEnemies];
 
-        if (roomStep >= 2 && !enemies.includes('mage')) enemies.push('mage');
-        if (roomStep >= 3 && !enemies.includes('bomber')) enemies.push('bomber');
-        if (roomStep >= 4 || this.ngPlusLevel > 0) {
-            if (!enemies.includes('summoner')) enemies.push('summoner');
+        // CAMBIO 18: Extras tematicos por bioma para coherencia narrativa
+        const thematic = {
+            forest:     ['mage', 'bomber'],
+            crypt:      ['mage', 'summoner'],
+            crystal:    ['mage', 'wisp'],
+            volcano:    ['bomber', 'brute'],
+            ruins:      ['mage', 'turret'],
+            swamp:      ['summoner', 'wisp'],
+            tundra:     ['brute', 'mage'],
+            desert:     ['bomber', 'brute'],
+            catacombs:  ['summoner', 'mage'],
+            skyrealm:   ['wisp', 'turret'],
+            abyss:      ['brute', 'mage'],
+            voidlands:  ['summoner', 'turret']
+        };
+
+        const biome = this.biome || 'forest';
+        const extras = thematic[biome] || ['mage', 'bomber'];
+
+        if (roomStep >= 2) {
+            for (const e of extras) {
+                if (!enemies.includes(e)) enemies.push(e);
+            }
         }
-        // Extra roles can reuse these "base types"
-        if (!enemies.includes('brute')) enemies.push('brute');
-        if (!enemies.includes('wisp')) enemies.push('wisp');
-        if (!enemies.includes('turret')) enemies.push('turret');
+        if (roomStep >= 4 || this.ngPlusLevel > 0) {
+            if (!enemies.includes('brute')) enemies.push('brute');
+        }
 
         return enemies;
     }

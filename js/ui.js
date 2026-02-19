@@ -1,4 +1,4 @@
-﻿// ==========================================
+// ==========================================
 // ARCANE DEPTHS - UI Manager (MAJOR UPDATE)
 // ==========================================
 
@@ -50,6 +50,7 @@ const UI = {
             'settings-screen': document.getElementById('settings-screen'),
             'game-screen': document.getElementById('game-screen'),
             'updates-screen': document.getElementById('updates-screen'), // New screen
+            'skilltree-screen': document.getElementById('skilltree-screen'),
         };
 
         this.setupMenuEvents();
@@ -245,6 +246,9 @@ const UI = {
         if (screenId === 'meta-screen') {
             if (typeof this.renderMetaShop === 'function') this.renderMetaShop();
         }
+        if (screenId === 'skilltree-screen') {
+            if (window.SkillTreeUI) SkillTreeUI.open();
+        }
         if (screenId === 'updates-screen') {
             if (typeof this.renderUpdates === 'function') this.renderUpdates();
         }
@@ -252,9 +256,11 @@ const UI = {
 
     renderUpdates() {
         try {
+            const notes014 = document.getElementById('updates-notes-014');
             const notes013 = document.getElementById('updates-notes-013');
             const notes012 = document.getElementById('updates-notes-012');
             const notes011 = document.getElementById('updates-notes-011');
+            if (notes014) notes014.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes014') : '';
             if (notes013) notes013.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes013') : '';
             if (notes012) notes012.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes012') : '';
             if (notes011) notes011.textContent = (window.i18n && typeof i18n.t === 'function') ? i18n.t('updatesNotes011') : '';
@@ -480,13 +486,13 @@ const UI = {
             };
         }
 
-        // Meta upgrades (permanent)
+        // Meta upgrades → now opens Skill Tree
         const metaBtn = document.getElementById('btn-meta');
         if (metaBtn) {
             metaBtn.onclick = () => {
                 AudioManager.play('menuClick');
-                this.showScreen('meta-screen');
-                if (typeof this.renderMetaShop === 'function') this.renderMetaShop();
+                this.showScreen('skilltree-screen');
+                if (window.SkillTreeUI) SkillTreeUI.open();
             };
         }
 
@@ -808,6 +814,15 @@ ${template}
         Game.loadFromSave(save);
         this.showScreen('game-screen');
         Game.start();
+
+        // Show tutorial on normal mode
+        console.log('[Tutorial] loadGame: difficulty=' + Game.difficulty + ' TutorialManager=' + !!window.TutorialManager);
+        if (Game.difficulty === 'normal' && window.TutorialManager) {
+            setTimeout(() => {
+                console.log('[Tutorial] loadGame setTimeout fired, calling show()');
+                TutorialManager.show();
+            }, 150);
+        }
     },
 
     setupDifficultyEvents() {
@@ -851,6 +866,15 @@ ${template}
         Game.newGame(this.selectedSlot, this.selectedDifficulty, ev, seedText);
         this.showScreen('game-screen');
         Game.start();
+
+        // Show tutorial only in normal mode
+        console.log('[Tutorial] startNewGame: difficulty=' + Game.difficulty + ' TutorialManager=' + !!window.TutorialManager);
+        if (Game.difficulty === 'normal' && window.TutorialManager) {
+            setTimeout(() => {
+                console.log('[Tutorial] setTimeout fired, calling show()');
+                TutorialManager.show();
+            }, 150);
+        }
     },
 
     setupSettingsEvents() {
@@ -1065,7 +1089,8 @@ document.getElementById('btn-apply-settings').onclick = () => {
                         <div><strong>Daño</strong>: <span id="stat-damage">0</span></div>
                         <div><strong>Oro</strong>: <span id="stat-gold">0</span></div>
                         <div><strong>Tiempo</strong>: <span id="stat-time">00:00</span></div>
-                        <div><strong>MVP</strong>: <span id="stat-mvp">-</span></div>
+                        <div><strong>Daño recibido</strong>: <span id="stat-damage-taken">0</span></div>
+                        <div><strong>Pociones usadas</strong>: <span id="stat-potions">0</span></div>
                         <div><strong>Esencia ganada</strong>: <span id="stat-essence-earned">0</span></div>
                         <div><strong>Esencia total</strong>: <span id="stat-essence-total">0</span></div>
                     </div>
@@ -1756,6 +1781,42 @@ document.getElementById('btn-apply-settings').onclick = () => {
         // closing the chest flow.
         this._lastLootOptions = { runeOption, itemOption };
 
+        // Detectar sinergia que se activaría al tomar la runa
+        const lootSynergyName = (() => {
+            try {
+                if (!window.SynergyDatabase || !window.Game || !Game.player) return null;
+                const player = Game.player;
+                const mockRunes = [...(player.runes || []).filter(Boolean), runeOption].filter(Boolean);
+                const mockPlayer = Object.assign(Object.create(Object.getPrototypeOf(player)), player, { runes: mockRunes });
+                const runeIds = mockRunes.map(r => r.id);
+                const currentIds = new Set((player.runes || []).filter(Boolean).map(r => r.id));
+
+                for (const [key, s] of Object.entries(SynergyDatabase)) {
+                    let wasActive = false;
+                    try {
+                        if (s.requires) wasActive = s.requires.every(id => currentIds.has(id));
+                        else if (s.requiresAny) wasActive = s.requiresAny.some(c => c.every(id => currentIds.has(id)));
+                        else if (s.requiresCheck) wasActive = s.requiresCheck(player);
+                    } catch(e) {}
+                    if (wasActive) continue;
+
+                    let wouldActivate = false;
+                    if (s.requires) wouldActivate = s.requires.every(id => runeIds.includes(id));
+                    else if (s.requiresAny) wouldActivate = s.requiresAny.some(c => c.every(id => runeIds.includes(id)));
+                    else if (s.requiresCheck) { try { wouldActivate = s.requiresCheck(mockPlayer); } catch(e) {} }
+
+                    if (wouldActivate) return s.getName ? s.getName() : key;
+                }
+            } catch(e) {}
+            return null;
+        })();
+
+        const synBadge = lootSynergyName
+            ? `<div style="margin-top:8px;background:rgba(255,0,255,0.2);border:1px solid #ff00ff;
+                border-radius:4px;padding:4px 6px;font-size:9px;color:#ff88ff;
+                font-family:'Press Start 2P',monospace;">⚡ SINERGIA: ${lootSynergyName}</div>`
+            : '';
+
         const modal = document.createElement('div');
         modal.id = 'loot-modal';
         modal.className = 'loot-modal';
@@ -1769,6 +1830,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
                         <div class="option-name">${runeOption.name}</div>
                         <div class="option-desc">${runeOption.desc || ''}</div>
                         <div class="option-rarity rarity-${runeOption.rarity}">${runeOption.rarity?.toUpperCase() || 'COMÚN'}</div>
+                        ${synBadge}
                     </div>
                     <div class="loot-divider">${i18n.t('lootOr')}</div>
                     <div class="loot-option item-option" id="choose-item">
@@ -2006,14 +2068,15 @@ document.getElementById('btn-apply-settings').onclick = () => {
         let pickedBlessing = null;
 
         const render = () => {
-            const leftTitle = pickedBlessing ? 'ELIGE UNA MALDICIÃ“N' : 'ELIGE UNA BENDICIÃ“N';
+            const t = (key, fallback) => (window.i18n && typeof i18n.t === 'function') ? (i18n.t(key) || fallback) : fallback;
+            const leftTitle = pickedBlessing ? t('ngChooseCurse', 'CHOOSE A CURSE') : t('ngChooseBlessing', 'CHOOSE A BLESSING');
             const list = pickedBlessing ? curses : blessings;
 
             let cards = '';
             list.forEach((opt, idx) => {
                 cards += `
                     <div class="reward-card epic" style="cursor:pointer" data-idx="${idx}">
-                        <div class="reward-icon">${pickedBlessing ? '☠️' : 'âœ¨'}</div>
+                        <div class="reward-icon">${pickedBlessing ? '☠️' : '✨'}</div>
                         <div class="reward-name">${opt.name}</div>
                         <div class="reward-desc">${opt.desc}</div>
                     </div>
@@ -2022,12 +2085,12 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
             modal.innerHTML = `
                 <div class="loot-content">
-                    <h2>NG+ ${Game.ngPlusLevel} â€” ${leftTitle}</h2>
+                    <h2>NG+ ${Game.ngPlusLevel} — ${leftTitle}</h2>
                     <p style="margin:0 0 10px 0; opacity:0.9">
-                        Mutación del bioma: <b>${Game.biomeMutation ? Game.biomeMutation.name : 'â€”'}</b>
-                        ${Game.biomeMutation ? ` â€” ${Game.biomeMutation.desc}` : ''}
+                        ${t('ngBiomeMutation', 'Biome mutation')}: <b>${Game.biomeMutation ? Game.biomeMutation.name : '—'}</b>
+                        ${Game.biomeMutation ? ` — ${Game.biomeMutation.desc}` : ''}
                     </p>
-                    ${pickedBlessing ? `<p style="margin:0 0 10px 0; opacity:0.9">Bendición elegida: <b>${pickedBlessing.name}</b></p>` : ''}
+                    ${pickedBlessing ? `<p style="margin:0 0 10px 0; opacity:0.9">${t('ngBlessingChosen', 'Blessing chosen')}: <b>${pickedBlessing.name}</b></p>` : ''}
                     <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center">
                         ${cards}
                     </div>
@@ -2375,6 +2438,22 @@ document.getElementById('btn-apply-settings').onclick = () => {
             if (!shop.allowReroll) return;
             if ((shop.rerollsLeft || 0) <= 0) return;
 
+            // CAMBIO 8: Costo en oro escalante
+            const REROLL_COSTS = [40, 80, 160, 240];
+            const rerollsDone = shop.rerollsDone || 0;
+            const cost = REROLL_COSTS[Math.min(rerollsDone, REROLL_COSTS.length - 1)];
+            if (Game.player.gold < cost) {
+                if (window.UI && typeof UI.showToast === 'function') {
+                    UI.showToast(`Necesitas ${cost}💰 para rerollear`);
+                }
+                return;
+            }
+            Game.player.gold -= cost;
+            shop.rerollsDone = rerollsDone + 1;
+            if (window.FloatingTextSystem && typeof FloatingTextSystem.gold === 'function') {
+                FloatingTextSystem.gold(Game.player.centerX, Game.player.centerY, -cost);
+            }
+
             shop.rerollsLeft--;
 
             shop.inventory.forEach(entry => {
@@ -2405,6 +2484,41 @@ document.getElementById('btn-apply-settings').onclick = () => {
         const render = () => {
             const p = Game.player;
             let itemsHtml = '';
+
+            // Helper sinergia para la tienda (maneja requires, requiresAny, requiresCheck)
+            const shopWouldActivateSynergy = (reward) => {
+                try {
+                    if (!window.SynergyDatabase || !p) return null;
+                    if (reward.kind !== 'rune' && (!reward.type || reward.type !== 'rune')) return null;
+                    const rune = reward.rune || reward;
+                    const mockRunes = [...(p.runes || []).filter(Boolean), rune].filter(Boolean);
+                    const mockPlayer = Object.assign(Object.create(Object.getPrototypeOf(p)), p, { runes: mockRunes });
+                    const runeIds = mockRunes.map(r => r.id);
+                    const currentIds = new Set((p.runes || []).filter(Boolean).map(r => r.id));
+
+                    for (const [key, s] of Object.entries(SynergyDatabase)) {
+                        let wasActive = false;
+                        try {
+                            if (s.requires) wasActive = s.requires.every(id => currentIds.has(id));
+                            else if (s.requiresAny) wasActive = s.requiresAny.some(c => c.every(id => currentIds.has(id)));
+                            else if (s.requiresCheck) wasActive = s.requiresCheck(p);
+                        } catch(e) {}
+                        if (wasActive) continue;
+
+                        let wouldActivate = false;
+                        if (s.requires) {
+                            wouldActivate = s.requires.every(id => runeIds.includes(id));
+                        } else if (s.requiresAny) {
+                            wouldActivate = s.requiresAny.some(combo => combo.every(id => runeIds.includes(id)));
+                        } else if (s.requiresCheck) {
+                            try { wouldActivate = s.requiresCheck(mockPlayer); } catch(e) {}
+                        }
+                        if (wouldActivate) return s.getName ? s.getName() : key;
+                    }
+                } catch(e) {}
+                return null;
+            };
+
             shop.inventory.forEach((entry, idx) => {
                 const sold = !!entry.sold;
                 const price = entry.price || 0;
@@ -2423,6 +2537,15 @@ document.getElementById('btn-apply-settings').onclick = () => {
                         ${locked ? '🔒 LOCK' : '🔓 LOCK'}
                     </button>` : '';
 
+                // Badge de sinergia en tienda
+                const synName = shopWouldActivateSynergy(entry);
+                const synergyBadge = synName ? `
+                    <div style="margin-top:7px;background:rgba(255,0,255,0.2);border:1px solid #ff00ff;
+                        border-radius:4px;padding:4px 6px;font-size:8px;color:#ff88ff;
+                        font-family:'Press Start 2P',monospace;">
+                        ⚡ SINERGIA: ${synName}
+                    </div>` : '';
+
                 itemsHtml += `
                     <div class="reward-card ${rarity} ${sold ? 'sold' : ''}" style="cursor:${sold ? 'not-allowed' : 'pointer'}" data-idx="${idx}">
                         <div class="reward-icon">${icon}</div>
@@ -2430,6 +2553,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
                         <div class="reward-desc" style="margin-top:4px; opacity:0.85; font-size:10px; letter-spacing:1px">${kindLabel}</div>
                         <div class="reward-desc">${desc}</div>
                         <div class="reward-desc" style="margin-top:6px; opacity:0.9">💰 ${price}</div>
+                        ${synergyBadge}
                         <button class="action-btn" style="margin-top:8px; padding:8px 12px; font-size:12px" ${sold || !canAfford ? 'disabled' : ''}>
                             ${sold ? i18n.t('shopBought') : (canAfford ? i18n.t('shopBuy') : i18n.t('shopNoGold'))}
                         </button>
@@ -2875,10 +2999,35 @@ document.getElementById('btn-apply-settings').onclick = () => {
             entries.push({ kind: 'active', idx, icon: it.icon, name: it.name, desc: it.desc || it.effect || '', rarity: it.rarity || 'common' });
         });
 
+        // Recycle limit: base 1, increases with shop_rerolls meta upgrade
+        const maxRecycles = (() => {
+            try {
+                if (window.Meta && typeof Meta.getShopRerolls === 'function') {
+                    return Meta.getShopRerolls(); // reusa la misma upgrade
+                }
+            } catch(e) {}
+            return 1;
+        })();
+
+        // Track recycles done this shop visit on the player object (reset on room change)
+        if (p._recyclesDoneThisShop === undefined) p._recyclesDoneThisShop = 0;
+        const recyclesLeft = Math.max(0, maxRecycles - p._recyclesDoneThisShop);
+
+        const goldLabel = (window.i18n && window.i18n.currentLang === 'es') ? 'Oro' : 'Gold';
         const title = (mode === 'sell') ? i18n.t('shopSell') : i18n.t('shopRecycle');
         const hint = (mode === 'sell')
             ? i18n.t('shopSellHint')
             : i18n.t('shopRecycleHint');
+
+        const isEs = window.i18n && window.i18n.currentLang === 'es';
+        const recycleLabel = isEs ? 'Reciclajes restantes' : 'Recycles left';
+        const backLabel = isEs ? 'Volver' : 'Back';
+
+        const recycleCountLine = (mode === 'recycle')
+            ? `<p style="margin:0 0 10px 0; opacity:0.9; color:${recyclesLeft > 0 ? '#8fff8f' : '#ff6b6b'}">
+                  ♻️ ${recycleLabel}: <strong>${recyclesLeft}/${maxRecycles}</strong>
+               </p>`
+            : '';
 
         const overlay = document.createElement('div');
         overlay.className = 'loot-modal';
@@ -2886,6 +3035,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
 
         const listHtml = entries.length ? entries.map((e, i) => {
             const tag = e.kind === 'rune' ? 'RUNA' : 'ACTIVO';
+            const goldWord = (window.i18n && window.i18n.currentLang === 'es') ? 'oro' : 'gold';
             let sellLine = '';
             if (mode === 'sell') {
                 let gain = 80;
@@ -2893,7 +3043,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
                 if (r === 'rare') gain = 140;
                 if (r === 'epic') gain = 240;
                 if (r === 'legendary') gain = 420;
-                sellLine = `<div class="reward-desc" style="margin-top:6px; opacity:0.95">💰 +${gain} oro</div>`;
+                sellLine = `<div class="reward-desc" style="margin-top:6px; opacity:0.95">💰 +${gain} ${goldWord}</div>`;
             }
             return `
                 <div class="reward-card ${e.rarity}" style="cursor:pointer" data-ex="${i}">
@@ -2910,11 +3060,12 @@ document.getElementById('btn-apply-settings').onclick = () => {
             <div class="loot-content">
                 <h2>${title}</h2>
                 <p style="margin:0 0 10px 0; opacity:0.9">${hint}</p>
-                <p style="margin:0 0 10px 0; opacity:0.9">Oro: 💰 ${p.gold}</p>
+                ${recycleCountLine}
+                <p style="margin:0 0 10px 0; opacity:0.9">${goldLabel}: 💰 ${p.gold}</p>
                 <div class="loot-options" style="gap:12px; flex-wrap:wrap; justify-content:center; margin-top:10px">
                     ${listHtml}
                 </div>
-                <button class="discard-btn" id="close-exchange">Volver</button>
+                <button class="discard-btn" id="close-exchange">${backLabel}</button>
             </div>
         `;
 
@@ -2944,18 +3095,25 @@ document.getElementById('btn-apply-settings').onclick = () => {
                         p.activeCooldowns[pick.idx] = 0;
                     }
                     p.gold += gain;
-                    try { if (window.UI && typeof UI.toastMessage === 'function') UI.toastMessage(`+${gain} oro`); } catch (e) {}
+                    const goldWord = (window.i18n && window.i18n.currentLang === 'es') ? 'oro' : 'gold';
+                    try { if (window.UI && typeof UI.toastMessage === 'function') UI.toastMessage(`+${gain} ${goldWord}`); } catch (e) {}
                     AudioManager.play('pickup');
                     close();
                     return;
                 }
 
-                // recycle
+                // recycle — check limit
+                if (recyclesLeft <= 0) {
+                    try { if (window.UI && typeof UI.toastMessage === 'function') UI.toastMessage('No quedan reciclajes disponibles'); } catch(e) {}
+                    return;
+                }
+
                 if (pick.kind === 'rune') {
                     const rarity = pick.rarity || 'common';
                     const newRune = (typeof getRandomRune === 'function') ? getRandomRune(rarity) : null;
                     if (newRune) {
                         p.equipRune({ ...newRune, rarity }, pick.idx);
+                        p._recyclesDoneThisShop = (p._recyclesDoneThisShop || 0) + 1;
                         AudioManager.play('pickup');
                     }
                     close();
@@ -2969,6 +3127,7 @@ document.getElementById('btn-apply-settings').onclick = () => {
                     if (pool.length) {
                         p.activeItems[pick.idx] = { ...Utils.randomChoice(pool), type: 'active' };
                         p.activeCooldowns[pick.idx] = 0;
+                        p._recyclesDoneThisShop = (p._recyclesDoneThisShop || 0) + 1;
                         AudioManager.play('pickup');
                     }
                     close();
@@ -3426,8 +3585,9 @@ document.getElementById('btn-apply-settings').onclick = () => {
             if (elTotal) elTotal.textContent = total;
         } catch (e) { }
 
-        const mvpRune = (player?.runes || []).find(r => r !== null);
-        setText('stat-mvp', mvpRune ? mvpRune.name : '-');
+        // CAMBIO 17: Daño recibido y pociones usadas
+        setText('stat-damage-taken', Utils.formatNumber(player?.stats?.damageTaken ?? 0));
+        setText('stat-potions', player?.stats?.potionsUsed ?? 0);
 
         // Add seed display
         const deathSeedContainer = document.getElementById('death-seed-container');
@@ -3438,6 +3598,50 @@ document.getElementById('btn-apply-settings').onclick = () => {
                     <button id="death-copy-seed" class="copy-seed-btn">📋 Copiar</button>
                 </div>
             `;
+
+        // CAMBIO 5: Build summary al final de la pantalla de muerte
+        try {
+            const pauseContent = screen.querySelector('.pause-content');
+            if (pauseContent && player) {
+                const oldSummary = pauseContent.querySelector('#death-build-summary');
+                if (oldSummary) oldSummary.remove();
+
+                const summary = document.createElement('div');
+                summary.id = 'death-build-summary';
+                summary.style.cssText = 'margin-top:16px;border-top:1px solid #444;padding-top:12px;width:100%;';
+
+                const runeIcons = (player.runes || []).filter(Boolean)
+                    .map(r => `<span title="${r.name}" style="font-size:18px">${r.icon || '?'}</span>`).join(' ');
+
+                const itemIcons = (player.passiveItems || []).filter(Boolean)
+                    .map(i => `<span title="${i.name}" style="font-size:18px">${i.icon || '?'}</span>`).join(' ');
+
+                let activeSynergies = '';
+                try {
+                    const db = window.SynergyDatabase;
+                    if (db) {
+                        const ids = new Set((player.runes || []).filter(Boolean).map(r => r.id));
+                        const active = Object.keys(db).filter(k => {
+                            const s = db[k];
+                            return s.requires && s.requires.every(id => ids.has(id));
+                        });
+                        if (active.length) {
+                            activeSynergies = `<div style="margin-top:8px;color:#ff88ff;font-size:8px;">
+                                ⚡ ${active.map(k => db[k].getName ? db[k].getName() : k).join(' · ')}
+                            </div>`;
+                        }
+                    }
+                } catch(e) {}
+
+                summary.innerHTML = `
+                    <div style="font-size:9px;color:#8fff8f;margin-bottom:8px;font-family:'Press Start 2P',monospace;">▸ BUILD FINAL</div>
+                    <div style="margin-bottom:6px;">${runeIcons}</div>
+                    <div>${itemIcons}</div>
+                    ${activeSynergies}
+                `;
+                pauseContent.appendChild(summary);
+            }
+        } catch(e) {}
             
             const copyBtn = document.getElementById('death-copy-seed');
             if (copyBtn) {
@@ -3595,6 +3799,47 @@ ensureRewardScreenElements() {
         container.innerHTML = '';
         this._lastRewardScreenRewards = rewards;
 
+        // CAMBIO 6: Helper para detectar sinergia activada por esta runa (todos los tipos)
+        const wouldActivateSynergy = (reward) => {
+            try {
+                if (!window.SynergyDatabase || !window.Game || !Game.player) return null;
+                const player = Game.player;
+
+                // Simular jugador con la runa nueva añadida
+                const mockRunes = [...(player.runes || []).filter(Boolean), reward].filter(Boolean);
+                const mockPlayer = Object.assign(Object.create(Object.getPrototypeOf(player)), player, { runes: mockRunes });
+
+                const runeIds = mockRunes.map(r => r.id);
+                const currentIds = new Set((player.runes || []).filter(Boolean).map(r => r.id));
+
+                for (const [key, s] of Object.entries(SynergyDatabase)) {
+                    // Chequear si ya estaba activa antes de agregar la runa
+                    let wasActive = false;
+                    try {
+                        const oldRunes = (player.runes || []).filter(Boolean);
+                        const oldIds = oldRunes.map(r => r.id);
+                        if (s.requires) wasActive = s.requires.every(id => currentIds.has(id));
+                        else if (s.requiresAny) wasActive = s.requiresAny.some(c => c.every(id => currentIds.has(id)));
+                        else if (s.requiresCheck) wasActive = s.requiresCheck(player);
+                    } catch(e) {}
+                    if (wasActive) continue;
+
+                    // Chequear si se activa con la nueva runa
+                    let wouldActivate = false;
+                    if (s.requires) {
+                        wouldActivate = s.requires.every(id => runeIds.includes(id));
+                    } else if (s.requiresAny) {
+                        wouldActivate = s.requiresAny.some(combo => combo.every(id => runeIds.includes(id)));
+                    } else if (s.requiresCheck) {
+                        try { wouldActivate = s.requiresCheck(mockPlayer); } catch(e) {}
+                    }
+
+                    if (wouldActivate) return s.getName ? s.getName() : key;
+                }
+            } catch(e) {}
+            return null;
+        };
+
         (rewards || []).forEach((reward) => {
             if (!reward) return;
 
@@ -3619,6 +3864,24 @@ ensureRewardScreenElements() {
                 <div class="reward-name" style="font-weight:800; margin-bottom:8px;">${name}</div>
                 <div class="reward-desc" style="opacity:0.85; font-size:14px; line-height:1.25;">${desc}</div>
             `;
+
+            // CAMBIO 6: Badge de sinergia
+            const synergyName = wouldActivateSynergy(reward);
+            if (synergyName) {
+                const badge = document.createElement('div');
+                badge.style.cssText = `
+                    margin-top: 8px;
+                    background: rgba(255,0,255,0.2);
+                    border: 1px solid #ff00ff;
+                    border-radius: 4px;
+                    padding: 4px 6px;
+                    font-size: 9px;
+                    color: #ff88ff;
+                    font-family: 'Press Start 2P', monospace;
+                `;
+                badge.textContent = `⚡ SINERGIA: ${synergyName}`;
+                card.appendChild(badge);
+            }
 
             card.onclick = () => {
                 try {
@@ -3717,7 +3980,7 @@ ensureRewardScreenElements() {
             const card = document.createElement('div');
             card.className = 'choice-card';
             card.innerHTML = `
-                <div class="choice-icon">${rel.icon || 'âœ¨'}</div>
+                <div class="choice-icon">${rel.icon || '✨'}</div>
                 <div class="choice-name">${rel.name || 'Reliquia'}</div>
                 <div class="choice-desc">${rel.desc || ''}</div>
             `;
@@ -4107,6 +4370,8 @@ root.innerHTML = cards.join('');
             const el = document.getElementById(id);
             if (el && !el.classList.contains('hidden')) return true;
         }
+        // Tutorial uses display style instead of hidden class
+        if (window.TutorialManager && TutorialManager.isOpen()) return true;
         return false;
     },
 

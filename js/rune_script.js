@@ -7,8 +7,8 @@
   const MAX_LINES = 16;
   const MAX_CPU_PER_EVENT = 30;
   const MAX_REPEAT = 6;
-  const MAX_SPAWNS_PER_SEC = 8;
-  const MIN_CAST_COOLDOWN = 0.25;
+  const MAX_SPAWNS_PER_SEC = 24;
+  const MIN_CAST_COOLDOWN = 0.05;
 
   // Hard caps per action (anti-exploit). Anything outside range is rejected.
   const ACTION_CAPS = {
@@ -379,13 +379,13 @@
         if (!n) continue;
         if (n.op === 'act') {
           perEventActions[ev] = (perEventActions[ev] || 0) + mult;
-          const base = 55; // baseline per action
+          const base = 18; // baseline per action (nerfed from 55)
           const cpu = (CPU_COST[n.action] || 5);
           const intensity = actionIntensity(n.action, n.args);
           const cm = chanceMult(n.args);
           const em = eventMult[ev] || 1.0;
           // Price rises with repeats (mult), cpu, intensity, and event frequency.
-          extraCost += Math.round(mult * (base + cpu * 35) * intensity * cm * em);
+          extraCost += Math.round(mult * (base + cpu * 10) * intensity * cm * em);
         } else if (n.op === 'if') {
           walk(n.body, ev, mult);
           if (n.elseBody) walk(n.elseBody, ev, mult);
@@ -398,8 +398,8 @@
     for (const [ev, list] of Object.entries(program)) walk(list, ev, 1);
 
     // Small additive price for script size/complexity.
-    extraCost += Math.round(lines * 25);
-    extraCost += Math.round(Object.values(perEventCpu).reduce((a,b)=>a+b,0) * 12);
+    extraCost += Math.round(lines * 6);
+    extraCost += Math.round(Object.values(perEventCpu).reduce((a,b)=>a+b,0) * 3);
 
     // Ensure integer and non-negative
     extraCost = Math.max(0, Math.floor(extraCost));
@@ -660,38 +660,7 @@
     const chanceReq = (typeof args.chance === 'number') ? args.chance : null;
     if (chanceReq !== null && chanceRoll > chanceReq) return;
 
-    // Small extra mana cost for scripted actions on cast (prevents exploits but stays light)
-    if (ctx.eventName === 'OnCast' && player) {
-      let extra = 0;
-      const cnt = (typeof args.count === 'number') ? Math.max(1, Math.floor(args.count)) : 1;
-      const dmg = (typeof args.damage === 'number') ? args.damage : 6;
-      switch (action) {
-        case 'SpawnProjectile':
-          extra = 0.10 + 0.12 * cnt + 0.01 * Math.min(20, dmg);
-          break;
-        case 'ApplyStatus':
-          extra = 0.18;
-          break;
-        case 'Chain':
-        case 'Bounce':
-        case 'Pierce':
-          extra = 0.16;
-          break;
-        case 'Explode':
-          extra = 0.25;
-          break;
-        case 'Heal':
-        case 'Shield':
-          extra = 0.22;
-          break;
-        case 'Summon':
-          extra = 0.30;
-          break;
-      }
-      extra = Math.min(1.2, Math.max(0, extra));
-      if ((player.mana || 0) < extra) return;
-      player.mana -= extra;
-    }
+    // Anti-exploit handled by CPU budget + dynamic pricing only
 
     // Convenience defaults
     const damage = (typeof args.damage === 'number') ? args.damage : 6;

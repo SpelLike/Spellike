@@ -286,8 +286,19 @@ const Game = {
             if (loc) { p.name = loc.name; p.desc = loc.desc; }
         });
 
-        const chosen = forceId ? pool.find(p => p.id === forceId) : Utils.randomChoice(pool);
-        this.biomeMutation = { ...chosen };
+        let chosen;
+        if (forceId) {
+            chosen = pool.find(p => p.id === forceId);
+        } else {
+            // CAMBIO 20: Usar RNG del dungeon para ser determinista por seed
+            const rng = (this.dungeon && typeof this.dungeon.rng === 'function')
+                ? this.dungeon.rng
+                : () => Math.random();
+            const idx = Math.floor(rng() * pool.length);
+            chosen = pool[idx] || pool[0];
+        }
+
+        this.biomeMutation = { ...(chosen || pool[0]) };
 
         // Apply mutation multipliers for this biome only
         this.mutationCountMult = (chosen.enemyCountMult || 1);
@@ -317,7 +328,117 @@ const Game = {
                     this.player.potions = Math.min(10, this.player.potions + startPotions);
                 }
             }
-        } catch (e) { }
+
+            // ── SKILL TREE MODIFIERS ──────────────────────────────────────
+            if (window.SkillTree) {
+                const mods = SkillTree.getModifiers();
+                const p = this.player;
+
+                // Damage % (applied as additive multiplier stored on player)
+                if (mods.damagePct !== 0) {
+                    p.skillTreeDamageMult = 1 + mods.damagePct;
+                }
+
+                // Fire rate (fireRate is seconds between shots; lower = faster)
+                if (mods.fireRatePct !== 0) {
+                    p.skillTreeFireRateMult = 1 + mods.fireRatePct; // 0.98 = 2% faster
+                }
+
+                // Projectile speed
+                if (mods.projSpeedPct !== 0) {
+                    p.projectileSpeed *= (1 + mods.projSpeedPct);
+                }
+
+                // Projectile range
+                if (mods.projRangePct !== 0) {
+                    p.projectileRange *= (1 + mods.projRangePct);
+                }
+
+                // Move speed
+                if (mods.moveSpeedPct !== 0) {
+                    p.speed *= (1 + mods.moveSpeedPct);
+                }
+
+                // Crit chance
+                if (mods.critChancePct !== 0) {
+                    p.skillTreeCritChance = (p.skillTreeCritChance || 0) + mods.critChancePct;
+                }
+
+                // Crit damage bonus
+                if (mods.critDmgPct !== 0) {
+                    p.skillTreeCritDmgBonus = (p.skillTreeCritDmgBonus || 0) + mods.critDmgPct;
+                }
+
+                // Max HP (additive on top of base)
+                if (mods.maxHpFlat !== 0) {
+                    // Already handled by Meta.getMaxHpBonus() above (which reads from SkillTree)
+                    // Avoid double-apply; Meta.getMaxHpBonus is already wired to SkillTree
+                }
+
+                // Max Mana
+                if (mods.maxManaFlat > 0) {
+                    p.maxMana += Math.floor(mods.maxManaFlat);
+                    p.mana = Math.min(p.mana + Math.floor(mods.maxManaFlat), p.maxMana);
+                }
+
+                // HP regen
+                if (mods.hpRegenPerSec > 0) {
+                    p.skillTreeHpRegen = (p.skillTreeHpRegen || 0) + mods.hpRegenPerSec;
+                }
+
+                // Damage reduction
+                if (mods.dmgReductionPct > 0) {
+                    p.skillTreeDmgReduction = (p.skillTreeDmgReduction || 0) + mods.dmgReductionPct;
+                }
+
+                // Lifesteal
+                if (mods.lifeStealPct > 0) {
+                    p.skillTreeLifesteal = (p.skillTreeLifesteal || 0) + mods.lifeStealPct;
+                }
+
+                // Reflect
+                if (mods.reflectDmgPct > 0) {
+                    p.skillTreeReflect = (p.skillTreeReflect || 0) + mods.reflectDmgPct;
+                }
+
+                // Mana cost reduction
+                if (mods.manaCostPct !== 0) {
+                    p.skillTreeManaCostMult = 1 + mods.manaCostPct; // <1 = cheaper
+                }
+
+                // Double shot
+                if (mods.doubleShotChancePct > 0) {
+                    p.skillTreeDoubleShotChance = (p.skillTreeDoubleShotChance || 0) + mods.doubleShotChancePct;
+                }
+
+                // Dash charges (already handled via Meta.getDashCharges)
+                // Dash CD reduction
+                if (mods.dashCooldownPct !== 0) {
+                    p.dashCooldown = Math.max(0.4, p.dashCooldown * (1 + mods.dashCooldownPct));
+                }
+
+                // Phoenix passive
+                if (mods.phoenixPassive) {
+                    p.skillTreePhoenix = true;
+                    p.skillTreePhoenixUsed = false;
+                }
+
+                // Chain hit bonus (stored for projectile logic)
+                if (mods.chainHitPct > 0) {
+                    p.skillTreeChainBonus = (p.skillTreeChainBonus || 0) + mods.chainHitPct;
+                }
+                if (mods.manaRegenPct && mods.manaRegenPct > 0) {
+                    p.manaRegenMultiplier = (p.manaRegenMultiplier || 1) * (1 + mods.manaRegenPct);
+                }
+                if (mods.moveSpeedPct && mods.moveSpeedPct > 0) {
+                    p.speed = Math.min(300, p.speed * (1 + mods.moveSpeedPct));
+                }
+                if (mods.maxManaFlat && mods.maxManaFlat > 0) {
+                    p.maxMana = (p.maxMana || 100) + mods.maxManaFlat;
+                    p.mana = Math.min(p.mana + mods.maxManaFlat, p.maxMana);
+                }
+            }
+        } catch (e) { console.warn('[applyMetaUpgrades]', e); }
     },
 
     initRunObjectives(force = false) {
@@ -759,9 +880,10 @@ const Game = {
                 } else if (result.type === 'prevRoom') {
                     this.goToPreviousRoom();
                 } else if (result.type === 'shop') {
+                    if (this.player) this.player._recyclesDoneThisShop = 0;
                     UI.showShop(result.shop);
                 } else if (result.type === 'forge') {
-                    UI.showForgeTerminal(result.forge);
+                    this._openForgeTerminal(result.forge);
                 } else if (result.type === 'event') {
                     if (result.event === 'shrine') {
                         UI.showShrineChoice();
@@ -830,7 +952,7 @@ const Game = {
         if (owner === 'enemy' && this.modifiers && this.modifiers.enemyProjectileSpeedMult) {
             finalSpeed *= this.modifiers.enemyProjectileSpeedMult;
         }
-        ProjectileManager.spawn(x, y, angle, damage, finalSpeed, range, owner, effects, runeData);
+        return ProjectileManager.spawn(x, y, angle, damage, finalSpeed, range, owner, effects, runeData);
     },
 
     // =========================
@@ -894,8 +1016,8 @@ const Game = {
 
         const ev = {
             kind: 'forge',
-            x: room.bounds.x + room.bounds.width - 150,
-            y: room.bounds.y + 20,
+            x: Utils.clamp(room.bounds.x + room.bounds.width - 180, room.bounds.x + 80, room.bounds.x + room.bounds.width - 180),
+            y: Utils.clamp(room.bounds.y + room.bounds.height / 2 - 32, room.bounds.y + 80, room.bounds.y + room.bounds.height - 120),
             w: 120,
             h: 64,
             used: false,
@@ -1268,18 +1390,20 @@ const Game = {
 
         // Check if this is a RUNE (has rune-specific properties like effect)
         // Runes have 'effect' property for combat effects (burn, pierce, chain, etc)
-        const isRune = item.type === 'rune' || item.effect !== undefined ||
-            item.extraProjectiles !== undefined ||
-            item.manaBonus !== undefined ||
-            item.fireRateBonus !== undefined ||
-            item.damageMultiplier !== undefined ||
-            item.manaRegen !== undefined ||
-            item.pierceCount !== undefined ||
-            item.lifeSteal !== undefined ||
-            item.chainCount !== undefined ||
-            item.critChance !== undefined ||
-            item.rangeMultiplier !== undefined ||
-            item.bossMultiplier !== undefined;
+        // IMPORTANT: Use truthy check so Item instances with 0-value properties
+        // (e.g. storm_ring has fireRateBonus=0) are NOT misidentified as runes.
+        const isRune = item.type === 'rune' || !!item.effect ||
+            !!(item.extraProjectiles) ||
+            !!(item.manaBonus) ||
+            !!(item.fireRateBonus) ||
+            !!(item.damageMultiplier) ||
+            !!(item.manaRegen) ||
+            !!(item.pierceCount) ||
+            !!(item.lifeSteal) ||
+            !!(item.chainCount) ||
+            !!(item.critChance) ||
+            !!(item.rangeMultiplier) ||
+            !!(item.bossMultiplier);
 
         if (isRune) {
             // This is a RUNE - goes to rune slots
@@ -1370,9 +1494,9 @@ const Game = {
             appliedSomething = true;
         }
 
-        // Speed bonus (permanent)
+        // Speed bonus (permanent, capped at +50% base = 270)
         if (item.speedBonus && item.speedBonus > 0) {
-            this.player.speed += item.speedBonus;
+            this.player.speed = Math.min(270, this.player.speed + item.speedBonus);
             this.player.addPassiveItem(item);
             appliedSomething = true;
         }
@@ -1504,18 +1628,19 @@ const Game = {
         }
 
         // Rewards are usually runes. If all rune slots are full, let the player choose which one to replace.
-        const isRune = reward.type === 'rune' || reward.effect !== undefined ||
-            reward.extraProjectiles !== undefined ||
-            reward.manaBonus !== undefined ||
-            reward.fireRateBonus !== undefined ||
-            reward.damageMultiplier !== undefined ||
-            reward.manaRegen !== undefined ||
-            reward.pierceCount !== undefined ||
-            reward.lifeSteal !== undefined ||
-            reward.chainCount !== undefined ||
-            reward.critChance !== undefined ||
-            reward.rangeMultiplier !== undefined ||
-            reward.bossMultiplier !== undefined;
+        // IMPORTANT: Use truthy check so Item instances with 0-value properties are NOT misidentified as runes.
+        const isRune = reward.type === 'rune' || !!reward.effect ||
+            !!(reward.extraProjectiles) ||
+            !!(reward.manaBonus) ||
+            !!(reward.fireRateBonus) ||
+            !!(reward.damageMultiplier) ||
+            !!(reward.manaRegen) ||
+            !!(reward.pierceCount) ||
+            !!(reward.lifeSteal) ||
+            !!(reward.chainCount) ||
+            !!(reward.critChance) ||
+            !!(reward.rangeMultiplier) ||
+            !!(reward.bossMultiplier);
 
         if (isRune) {
             UI.handleRuneChoice({ ...reward }, 'boss');
@@ -1632,7 +1757,10 @@ const Game = {
     startNewGamePlus() {
         this.ngPlusLevel++;
         this.ngTransitionsThisRun = (this.ngTransitionsThisRun || 0) + 1;
-        this.bossKillsThisRun = 0;
+        // BUG FIX: Do NOT reset bossKillsThisRun to 0 on NG+.
+        // This preserves enemy HP/damage scaling between loops so enemies
+        // keep getting harder with each NG+ transition instead of resetting.
+        // bossKillsThisRun is intentionally kept as-is here.
 
         try {
             if (window.Meta && typeof Meta.recordNgPlus === 'function') {
@@ -1783,7 +1911,7 @@ const Game = {
                 if (typeof Meta.addEssence === 'function') {
                     const bosses = Math.max(0, Math.floor(this.bossKillsTotalRun || 0));
                     const ng = Math.max(0, Math.floor(this.ngTransitionsThisRun || 0));
-                    const earned = Math.floor(bosses / 2) + (ng * 3);
+                    const earned = Math.max(bosses >= 1 ? 1 : 0, Math.floor(bosses / 2)) + (ng * 3);
                     if (earned > 0) {
                         Meta.addEssence(earned);
                         // Store for UI (death screen)
@@ -1888,6 +2016,955 @@ const Game = {
 
     shake(intensity) {
         this.screenshake.intensity = Math.max(this.screenshake.intensity, intensity);
+    },
+
+    // ── FORGE TERMINAL (standalone, no dependency on ui.js) ───────────────
+    _openForgeTerminal(ev) {
+        if (!ev || !this.player) return;
+        const player = this.player;
+        const baseCost = ev.cost || 0;
+        if (baseCost > 0 && (player.gold || 0) < baseCost) {
+            if (window.UI && typeof UI.toast === 'function') UI.toast(`Necesitas ${baseCost} 💰`, 'warn');
+            return;
+        }
+        const emptyRunes = (player.runes || []).map((r, i) => ({ r, i })).filter(({ r }) => r && r.id === 'empty_rune' && !r.programmed);
+        if (emptyRunes.length === 0) { this._showForgeNoRuneMsg(); return; }
+        this.paused = true;
+
+        const lang = (window.i18n && window.i18n.currentLang) ? window.i18n.currentLang : 'en';
+        const isEs = lang === 'es';
+
+        const T = {
+            title:       isEs ? '⚒ FORJA — Programar Runa'             : '⚒ FORGE — Program Rune',
+            grimoire:    isEs ? '📖 Grimorio de las Runas'              : '📖 Grimoire of Runes',
+            hideGrim:    isEs ? '📖 Ocultar Grimorio'                   : '📖 Hide Grimoire',
+            runeLabel:   isEs ? 'Runa a programar:'                     : 'Rune to program:',
+            templates:   isEs ? 'Plantillas:'                           : 'Templates:',
+            placeholder: isEs ? 'OnCast:\n  SpawnProjectile damage=4 count=1 spread=12' : 'OnCast:\n  SpawnProjectile damage=4 count=1 spread=12',
+            cancel:      isEs ? 'Cancelar'                              : 'Cancel',
+            program:     isEs ? 'Programar'                             : 'Program',
+            free:        isEs ? 'GRATIS'                                : 'FREE',
+            costLabel:   isEs ? 'Costo:'                                : 'Cost:',
+            scriptCost:  isEs ? 'Costo del script:'                     : 'Script cost:',
+            totalCost:   isEs ? 'Total:'                                : 'Total:',
+            validOk:     isEs ? '✓ Válido'                              : '✓ Valid',
+            errEmpty:    isEs ? '✗ El script no puede estar vacío.'     : '✗ Script cannot be empty.',
+            errGold:     (n) => isEs ? `✗ Oro insuficiente (necesitás ${n})` : `✗ Not enough gold (need ${n})`,
+            successMsg:  isEs ? '✓ ¡Runa programada!'                   : '✓ Rune programmed!',
+            runeSlot:    (idx, slot) => isEs ? `Runa ${idx+1} (slot ${slot+1})` : `Rune ${idx+1} (slot ${slot+1})`,
+            cpu:         isEs ? 'CPU'                                   : 'CPU',
+            lines:       isEs ? 'Líneas'                                : 'Lines',
+        };
+
+        // --- Inject styles ---
+        if (!document.getElementById('_forge-styles')) {
+            const style = document.createElement('style');
+            style.id = '_forge-styles';
+            style.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Share+Tech+Mono&display=swap');
+
+#_forge-modal {
+    position:fixed;inset:0;z-index:9999;
+    background: radial-gradient(ellipse at 50% 30%, rgba(10,20,40,0.97) 0%, rgba(4,8,16,0.99) 100%);
+    display:flex;align-items:center;justify-content:center;
+    animation: forge-fadein 0.25s ease;
+}
+@keyframes forge-fadein { from{opacity:0} to{opacity:1} }
+
+.forge-panel {
+    background: linear-gradient(160deg, #0b1421 0%, #080f1c 100%);
+    border: 1px solid rgba(80,160,255,0.3);
+    border-radius: 16px;
+    padding: 0;
+    width: min(1140px, 96vw);
+    max-height: 92vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 60px rgba(60,120,255,0.15), 0 0 120px rgba(60,80,200,0.08), inset 0 1px 0 rgba(100,180,255,0.1);
+    animation: forge-slidein 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    font-family: 'Share Tech Mono', monospace;
+}
+@keyframes forge-slidein { from{transform:translateY(20px) scale(0.97);opacity:0} to{transform:none;opacity:1} }
+
+.forge-header {
+    padding: 20px 24px 16px;
+    background: linear-gradient(90deg, rgba(30,60,120,0.4) 0%, rgba(10,20,50,0.2) 100%);
+    border-bottom: 1px solid rgba(80,140,255,0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.forge-title {
+    font-family: 'Cinzel', serif;
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #7ec8ff;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 20px rgba(100,180,255,0.5);
+    margin: 0;
+}
+.forge-cost-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85em;
+}
+.forge-cost-item {
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid;
+    font-size: 0.82em;
+    letter-spacing: 0.05em;
+}
+.forge-cost-base { color: #fa4; border-color: rgba(255,170,60,0.4); background: rgba(255,140,20,0.08); }
+.forge-cost-script { color: #a8d8ff; border-color: rgba(100,180,255,0.3); background: rgba(60,120,255,0.06); }
+.forge-cost-total { color: #4fdb88; border-color: rgba(60,200,120,0.4); background: rgba(40,180,100,0.1); font-weight:700; }
+
+.forge-body {
+    padding: 18px 24px;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 18px;
+    min-height: 0;
+}
+.forge-left {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+}
+.forge-left::-webkit-scrollbar { width:5px; }
+.forge-left::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+.forge-left::-webkit-scrollbar-thumb { background: rgba(80,140,255,0.3); border-radius:3px; }
+
+.forge-row-label {
+    font-size: 0.78em;
+    color: #6a8aaa;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.forge-select {
+    background: rgba(15,30,60,0.8);
+    color: #a0c8f0;
+    border: 1px solid rgba(80,140,255,0.35);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85em;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.forge-select:focus { border-color: rgba(100,180,255,0.7); box-shadow: 0 0 0 2px rgba(80,160,255,0.15); }
+
+.forge-templates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    align-items: center;
+}
+.forge-tpl-btn {
+    background: rgba(20,40,80,0.6);
+    color: #7ab8e8;
+    border: 1px solid rgba(80,140,220,0.3);
+    border-radius: 20px;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-size: 0.75em;
+    font-family: 'Share Tech Mono', monospace;
+    transition: all 0.18s;
+    letter-spacing: 0.03em;
+}
+.forge-tpl-btn:hover { background: rgba(40,80,160,0.5); border-color: rgba(100,180,255,0.6); color: #bde0ff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(60,120,255,0.2); }
+
+.forge-editor {
+    width: 100%;
+    min-height: 140px;
+    background: rgba(6,12,24,0.9);
+    color: #64d0ff;
+    border: 1px solid rgba(60,120,200,0.3);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 0.88em;
+    font-family: 'Share Tech Mono', monospace;
+    resize: vertical;
+    box-sizing: border-box;
+    outline: none;
+    line-height: 1.6;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.forge-editor:focus { border-color: rgba(80,160,255,0.6); box-shadow: 0 0 0 3px rgba(60,120,255,0.1), inset 0 0 20px rgba(60,100,200,0.05); }
+.forge-editor::placeholder { color: rgba(80,130,180,0.4); }
+
+.forge-status {
+    font-size: 0.78em;
+    min-height: 28px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(6,12,24,0.6);
+    border: 1px solid rgba(40,80,140,0.2);
+    transition: all 0.2s;
+    letter-spacing: 0.03em;
+}
+.forge-status.ok { color: #4fdb88; border-color: rgba(60,200,120,0.25); background: rgba(20,60,40,0.3); }
+.forge-status.err { color: #ff6b6b; border-color: rgba(200,60,60,0.25); background: rgba(60,20,20,0.3); }
+
+/* Grimoire - right column */
+.forge-grimoire-toggle {
+    display: none; /* hidden - grimoire is always visible as right panel */
+}
+
+.forge-grimoire-panel {
+    background: rgba(6,14,30,0.95);
+    border: 1px solid rgba(60,110,200,0.25);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    width: 360px;
+    min-width: 300px;
+    max-width: 400px;
+    flex-shrink: 0;
+    align-self: stretch;
+    animation: forge-grim-reveal 0.22s ease;
+}
+.forge-grimoire-panel.visible { display: flex; }
+@keyframes forge-grim-reveal { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+
+.forge-grim-header {
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid rgba(60,100,200,0.2);
+    background: linear-gradient(90deg, rgba(20,40,80,0.5) 0%, transparent 100%);
+}
+.forge-grim-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.95em;
+    color: #90c8ff;
+    letter-spacing: 0.1em;
+    margin: 0 0 10px;
+    text-shadow: 0 0 15px rgba(100,180,255,0.4);
+}
+.forge-grim-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.forge-grim-tab {
+    background: rgba(15,30,60,0.6);
+    color: #6a96c0;
+    border: 1px solid rgba(60,100,180,0.25);
+    border-radius: 20px;
+    padding: 4px 14px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75em;
+    transition: all 0.18s;
+    letter-spacing: 0.04em;
+}
+.forge-grim-tab:hover { background: rgba(30,60,120,0.5); color: #9ac4e8; }
+.forge-grim-tab.active { background: linear-gradient(135deg, rgba(40,80,180,0.6), rgba(20,50,120,0.4)); color: #c0e0ff; border-color: rgba(80,150,255,0.4); box-shadow: 0 2px 8px rgba(60,120,255,0.15); }
+
+.forge-grim-body { flex: 1; overflow-y: auto; padding: 16px 18px; min-height: 0; }
+.forge-grim-body::-webkit-scrollbar { width:4px; }
+.forge-grim-body::-webkit-scrollbar-thumb { background: rgba(80,140,255,0.25); border-radius:2px; }
+
+.forge-grim-page { display:none; }
+.forge-grim-page.active { display:block; animation: forge-grim-reveal 0.18s ease; }
+
+.grim-section { margin-bottom: 18px; }
+.grim-section-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.8em;
+    color: #7eb8e8;
+    letter-spacing: 0.12em;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(60,100,180,0.2);
+}
+.grim-text { font-size: 0.78em; color: #8aaac8; line-height: 1.7; }
+.grim-text b { color: #a8d0f0; }
+.grim-code {
+    background: rgba(4,10,22,0.8);
+    border: 1px solid rgba(40,80,160,0.3);
+    border-radius: 7px;
+    padding: 10px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.76em;
+    color: #64d0ff;
+    white-space: pre;
+    margin: 8px 0;
+    line-height: 1.6;
+    overflow-x: auto;
+}
+.grim-event-card, .grim-action-card {
+    background: rgba(10,20,44,0.7);
+    border: 1px solid rgba(50,90,180,0.2);
+    border-radius: 9px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+}
+.grim-event-card:hover, .grim-action-card:hover { border-color: rgba(80,140,255,0.35); }
+.grim-card-title { font-size: 0.82em; color: #a0d4ff; margin-bottom: 4px; letter-spacing: 0.05em; }
+.grim-card-desc { font-size: 0.75em; color: #7090b0; line-height:1.5; }
+.grim-card-params { font-size: 0.7em; color: #506880; margin-top: 5px; font-family: 'Share Tech Mono', monospace; }
+.grim-tip {
+    background: rgba(20,50,40,0.4);
+    border-left: 3px solid rgba(60,180,120,0.5);
+    border-radius: 0 8px 8px 0;
+    padding: 8px 12px;
+    margin: 8px 0;
+    font-size: 0.75em;
+    color: #7abda0;
+    line-height: 1.6;
+}
+.grim-apply-btn {
+    background: linear-gradient(135deg, rgba(20,60,40,0.7), rgba(10,40,25,0.7));
+    color: #4fdb88;
+    border: 1px solid rgba(60,180,100,0.4);
+    border-radius: 6px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72em;
+    letter-spacing: 0.05em;
+    transition: all 0.18s;
+    flex-shrink: 0;
+}
+.grim-apply-btn:hover { background: linear-gradient(135deg, rgba(30,90,55,0.9), rgba(15,60,35,0.9)); border-color: rgba(80,220,120,0.6); color: #6fffa8; transform: scale(1.05); }
+
+.grim-link-btn {
+    background: rgba(15,30,70,0.5);
+    color: #7ab4e0;
+    border: 1px solid rgba(60,100,200,0.25);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.77em;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 6px;
+    transition: all 0.18s;
+    display: block;
+}
+.grim-link-btn:hover { background: rgba(30,60,140,0.4); border-color: rgba(80,150,255,0.4); color: #a0d0ff; transform: translateX(3px); }
+
+/* Footer */
+.forge-footer {
+    padding: 14px 24px 18px;
+    border-top: 1px solid rgba(60,100,180,0.15);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.forge-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85em;
+    border-radius: 9px;
+    padding: 9px 22px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+    border: 1px solid;
+}
+.forge-btn-cancel {
+    background: rgba(40,15,15,0.5);
+    color: #d08080;
+    border-color: rgba(180,60,60,0.35);
+}
+.forge-btn-cancel:hover { background: rgba(80,20,20,0.5); border-color: rgba(220,80,80,0.5); color: #ffaaaa; transform: translateY(-1px); }
+.forge-btn-program {
+    background: linear-gradient(135deg, rgba(20,70,40,0.8), rgba(10,50,30,0.8));
+    color: #4fdb88;
+    border-color: rgba(60,180,100,0.5);
+    box-shadow: 0 4px 16px rgba(40,180,90,0.15);
+}
+.forge-btn-program:hover { background: linear-gradient(135deg, rgba(30,100,55,0.9), rgba(15,70,40,0.9)); border-color: rgba(80,220,120,0.6); color: #6fffa8; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(40,200,100,0.25); }
+.forge-btn-program:active { transform: translateY(0); }
+
+/* Rune orbit animation in panel */
+.forge-rune-orb {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #a0e0ff, #4080ff);
+    box-shadow: 0 0 8px #60b0ff;
+    display: inline-block;
+    margin-right: 6px;
+    animation: forge-pulse 2s ease-in-out infinite;
+}
+@keyframes forge-pulse {
+    0%,100% { opacity:0.6; transform:scale(0.9); }
+    50% { opacity:1; transform:scale(1.15); }
+}
+            `;
+            document.head.appendChild(style);
+        }
+
+        const modal = document.createElement('div');
+        modal.id = '_forge-modal';
+
+        const panel = document.createElement('div');
+        panel.className = 'forge-panel';
+
+        // --- Header ---
+        const header = document.createElement('div');
+        header.className = 'forge-header';
+
+        const titleEl = document.createElement('h2');
+        titleEl.className = 'forge-title';
+        titleEl.innerHTML = `<span class="forge-rune-orb"></span>${T.title}`;
+
+        const costBadge = document.createElement('div');
+        costBadge.className = 'forge-cost-badge';
+
+        const baseCostEl = document.createElement('span');
+        baseCostEl.className = 'forge-cost-item forge-cost-base';
+        baseCostEl.textContent = baseCost > 0 ? `${T.costLabel} ${baseCost} 💰` : T.free;
+
+        const scriptCostEl = document.createElement('span');
+        scriptCostEl.className = 'forge-cost-item forge-cost-script';
+        scriptCostEl.textContent = `${T.scriptCost} 0 💰`;
+
+        const totalCostEl = document.createElement('span');
+        totalCostEl.className = 'forge-cost-item forge-cost-total';
+        totalCostEl.textContent = `${T.totalCost} ${baseCost} 💰`;
+
+        costBadge.append(baseCostEl, scriptCostEl, totalCostEl);
+        header.append(titleEl, costBadge);
+
+        // --- Body ---
+        const body = document.createElement('div');
+        body.className = 'forge-body';
+
+        // LEFT COLUMN
+        const leftCol = document.createElement('div');
+        leftCol.className = 'forge-left';
+
+        // Rune selector
+        let selectedRuneIdx = emptyRunes[0].i;
+        if (emptyRunes.length > 1) {
+            const selRow = document.createElement('div');
+            const selLabel = document.createElement('div');
+            selLabel.className = 'forge-row-label';
+            selLabel.textContent = T.runeLabel;
+            const sel = document.createElement('select');
+            sel.className = 'forge-select';
+            emptyRunes.forEach(({ i }, idx) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = T.runeSlot(idx, i);
+                sel.append(opt);
+            });
+            sel.addEventListener('change', () => { selectedRuneIdx = parseInt(sel.value); });
+            selRow.append(selLabel, sel);
+            leftCol.append(selRow);
+        }
+
+        // Templates
+        const templates = (window.RuneScript && RuneScript.templates) ? RuneScript.templates : {};
+        if (Object.keys(templates).length > 0) {
+            const tplRow = document.createElement('div');
+            const tplLabel = document.createElement('div');
+            tplLabel.className = 'forge-row-label';
+            tplLabel.textContent = T.templates;
+            const tplBtns = document.createElement('div');
+            tplBtns.className = 'forge-templates';
+            Object.entries(templates).forEach(([key, code]) => {
+                const btn = document.createElement('button');
+                btn.className = 'forge-tpl-btn';
+                btn.textContent = key;
+                btn.addEventListener('click', () => { editor.value = code; updateStatus(); });
+                tplBtns.append(btn);
+            });
+            tplRow.append(tplLabel, tplBtns);
+            leftCol.append(tplRow);
+        }
+
+        // Editor
+        const editor = document.createElement('textarea');
+        editor.className = 'forge-editor';
+        editor.style.flex = '1';
+        editor.style.minHeight = '200px';
+        editor.placeholder = T.placeholder;
+        leftCol.append(editor);
+
+        // Status bar
+        const status = document.createElement('div');
+        status.className = 'forge-status';
+        leftCol.append(status);
+
+        function updateStatus() {
+            const src = editor.value;
+            if (!src.trim() || !window.RuneScript) { status.textContent = ''; status.className = 'forge-status'; updateCostDisplay(0); return; }
+            const r = RuneScript.compile(src);
+            if (r.ok) {
+                const a = RuneScript.analyze(src);
+                if (a.ok) {
+                    const totalCpu = Object.values(a.perEventCpu || {}).reduce((s,v)=>s+v, 0);
+                    status.className = 'forge-status ok';
+                    status.textContent = `${T.validOk} | ${T.cpu}: ${totalCpu}/${RuneScript.limits.MAX_CPU_PER_EVENT} | ${T.lines}: ${a.lines}/${RuneScript.limits.MAX_LINES}`;
+                    updateCostDisplay(a.extraCost || 0);
+                } else {
+                    status.className = 'forge-status ok';
+                    status.textContent = T.validOk;
+                    updateCostDisplay(0);
+                }
+            } else {
+                status.className = 'forge-status err';
+                status.textContent = `✗ ${r.error}`;
+                updateCostDisplay(0);
+            }
+        }
+
+        function updateCostDisplay(extraCost) {
+            const total = baseCost + extraCost;
+            scriptCostEl.textContent = `${T.scriptCost} ${extraCost} 💰`;
+            totalCostEl.textContent = `${T.totalCost} ${total} 💰`;
+            updateBtnCost(total);
+        }
+
+        editor.addEventListener('input', updateStatus);
+
+        // Finalize left column
+        body.append(leftCol);
+
+        // RIGHT COLUMN - Grimoire (always visible)
+        const grimPanel = document.createElement('div');
+        grimPanel.className = 'forge-grimoire-panel visible';
+
+        const grimHeader = document.createElement('div');
+        grimHeader.className = 'forge-grim-header';
+
+        const grimTitle = document.createElement('div');
+        grimTitle.className = 'forge-grim-title';
+        grimTitle.textContent = isEs ? '✦ Grimorio de las Runas ✦' : '✦ Grimoire of Runes ✦';
+
+        const MAX_LINES = (window.RuneScript && RuneScript.limits) ? RuneScript.limits.MAX_LINES : 16;
+        const MAX_CPU = (window.RuneScript && RuneScript.limits) ? RuneScript.limits.MAX_CPU_PER_EVENT : 30;
+        const MAX_REPEAT = (window.RuneScript && RuneScript.limits) ? RuneScript.limits.MAX_REPEAT : 6;
+        const MAX_SPAWNS = (window.RuneScript && RuneScript.limits) ? RuneScript.limits.MAX_SPAWNS_PER_SEC : 8;
+
+        const grimTabsEl = document.createElement('div');
+        grimTabsEl.className = 'forge-grim-tabs';
+
+        const grimPages = isEs
+            ? [
+                { key:'index',   label:'Índice' },
+                { key:'events',  label:'Eventos' },
+                { key:'actions', label:'Acciones' },
+                { key:'rules',   label:'Reglas' },
+                { key:'examples',label:'Ejemplos' },
+              ]
+            : [
+                { key:'index',   label:'Index' },
+                { key:'events',  label:'Events' },
+                { key:'actions', label:'Actions' },
+                { key:'rules',   label:'Rules' },
+                { key:'examples',label:'Examples' },
+              ];
+
+        grimHeader.append(grimTitle, grimTabsEl);
+
+        const grimBody = document.createElement('div');
+        grimBody.className = 'forge-grim-body';
+
+        grimPanel.append(grimHeader, grimBody);
+        body.append(grimPanel);
+
+        // Build grimoire pages
+        function makeGrimPage(key, html) {
+            const page = document.createElement('div');
+            page.className = 'forge-grim-page';
+            page.dataset.page = key;
+            page.innerHTML = html;
+            grimBody.append(page);
+            return page;
+        }
+
+        const caps = (window.RuneScript && RuneScript.caps) ? RuneScript.caps : {};
+        function capLine(action) {
+            const c = caps[action]; if (!c) return '';
+            return Object.entries(c).map(([k,r]) => r.enum ? `${k}=[${r.enum.join('|')}]` : `${k}=${r.min}..${r.max}`).join(' · ');
+        }
+
+        if (isEs) {
+            // INDEX
+            makeGrimPage('index', `
+<div class="grim-section">
+    <div class="grim-section-title">¿Cómo funciona la Forja?</div>
+    <div class="grim-text">La Forja te deja escribir un pequeño <b>guión mágico</b> que tu runa ejecutará durante el combate.<br>Pensalo como instrucciones: <b>"cuando pase X, hacé Y"</b>.</div>
+    <div class="grim-tip">💡 Empezá por un <b>Evento</b> (¿cuándo?), luego agregá <b>Acciones</b> (¿qué hace?).</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Pasos rápidos</div>
+    <div class="grim-code">1. Elegí un evento:  OnCast:
+2. Escribí una acción indentada:
+     SpawnProjectile damage=8 count=2
+3. Hacé clic en "Programar" ✓</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Secciones</div>
+    <button class="grim-link-btn" data-go="events">📌 Eventos — ¿cuándo se activa?</button>
+    <button class="grim-link-btn" data-go="actions">🧩 Acciones — ¿qué hace?</button>
+    <button class="grim-link-btn" data-go="rules">🛡 Reglas — límites y condiciones</button>
+    <button class="grim-link-btn" data-go="examples">✨ Ejemplos — plantillas listas</button>
+</div>`);
+
+            // EVENTS
+            makeGrimPage('events', `
+<div class="grim-section">
+    <div class="grim-section-title">Eventos disponibles</div>
+    <div class="grim-text">Cada evento se escribe <b>sin indentación</b>, seguido de dos puntos. Las acciones van <b>indentadas</b> debajo (con 2 espacios o Tab).</div>
+</div>
+${[
+    { id:'OnCast', ico:'⚡', desc: isEs ? 'Cuando disparás. Ideal para proyectiles extra.' : 'On shoot.', tip: isEs ? 'Más efectivo para daño directo' : '' },
+    { id:'OnHit',  ico:'💥', desc: isEs ? 'Cuando tu proyectil golpea un enemigo.' : 'On hit.', tip: isEs ? 'Cuesta más, muy poderoso.' : '' },
+    { id:'OnKill', ico:'💀', desc: isEs ? 'Cuando matás un enemigo.' : 'On kill.', tip: '' },
+    { id:'OnRoomClear', ico:'🏆', desc: isEs ? 'Al limpiar toda la sala. Bueno para escudos y curas.' : 'Room cleared.', tip: '' },
+    { id:'OnDamageTaken', ico:'🩹', desc: isEs ? 'Cuando recibís daño. Útil para reacciones defensivas.' : 'On damage.', tip: '' },
+].map(e=>`
+<div class="grim-event-card">
+    <div class="grim-card-title">${e.ico} ${e.id}</div>
+    <div class="grim-card-desc">${e.desc}${e.tip ? ` <b>${e.tip}</b>` : ''}</div>
+    <div class="grim-code">${e.id}:\n  SpawnProjectile damage=6 count=1</div>
+</div>`).join('')}`);
+
+            // ACTIONS
+            makeGrimPage('actions', `
+<div class="grim-section">
+    <div class="grim-section-title">Comandos (Acciones)</div>
+    <div class="grim-text">Escribilos <b>indentados</b> bajo un evento. Podés combinar varios. Si el valor está fuera del rango, la runa no se programa.</div>
+</div>
+${[
+    { id:'SpawnProjectile', ico:'🏹', desc:'Dispara proyectiles extra en la dirección que apuntás.' },
+    { id:'ApplyStatus',     ico:'🔥', desc:'Aplica un efecto al enemigo golpeado: burn (quema), poison (veneno) o slow (ralentización).' },
+    { id:'Explode',         ico:'💣', desc:'Explosión que daña a todos los enemigos cerca del objetivo.' },
+    { id:'Heal',            ico:'❤️', desc:'Te cura instantáneamente.' },
+    { id:'Shield',          ico:'🛡', desc:'Genera un escudo temporal que absorbe daño.' },
+    { id:'Chain',           ico:'⛓', desc:'El daño salta al enemigo más cercano al objetivo.' },
+    { id:'Bounce',          ico:'🔄', desc:'Tu proyectil rebota contra enemigos o paredes.' },
+    { id:'Pierce',          ico:'➡', desc:'Tu proyectil atraviesa enemigos.' },
+    { id:'Summon',          ico:'👻', desc:'Invoca un aliado temporal (wisp, stalker, brute, turret).' },
+].map(a=>`
+<div class="grim-action-card">
+    <div class="grim-card-title">${a.ico} ${a.id}</div>
+    <div class="grim-card-desc">${a.desc}</div>
+    <div class="grim-card-params">Params: ${capLine(a.id) || '—'}</div>
+</div>`).join('')}
+<div class="grim-tip">💡 <b>chance=</b> agrega probabilidad (0-100). <b>chance=50</b> = 50% de activarse.</div>`);
+
+            // RULES
+            makeGrimPage('rules', `
+<div class="grim-section">
+    <div class="grim-section-title">Límites del sistema</div>
+    <div class="grim-text">Estos límites existen para que el juego no se rompa:</div>
+    <div class="grim-code">Máx líneas:   ${MAX_LINES}
+CPU/evento:   ${MAX_CPU}
+repeat máx:   ${MAX_REPEAT}
+spawns/seg:   ${MAX_SPAWNS}</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Condiciones (if / else)</div>
+    <div class="grim-text">Podés usar <b>if</b> para condicionar acciones. Variables: <b>mana, cooldown, stacks, chance, range, damage, count</b></div>
+    <div class="grim-code">OnHit:
+  if chance &lt; 25:
+    Explode radius=80 damage=18
+  else:
+    ApplyStatus type=burn damage=5 duration=2</div>
+    <div class="grim-tip">💡 <b>chance &lt; 25</b> significa "25% de probabilidad de activarse"</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Loops (repeat)</div>
+    <div class="grim-text">Repetí una acción N veces. Máximo <b>${MAX_REPEAT}</b> repeticiones. Más repeticiones = más caro.</div>
+    <div class="grim-code">OnCast:
+  repeat 3:
+    SpawnProjectile damage=4 count=1 spread=8</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Precios dinámicos</div>
+    <div class="grim-text">El costo sube según la potencia: <b>más daño, más proyectiles, eventos frecuentes y repeats</b> encarecen la runa. El precio se actualiza en tiempo real mientras escribís.</div>
+</div>`);
+
+            // EXAMPLES
+            makeGrimPage('examples', `
+<div class="grim-section">
+    <div class="grim-section-title">Ejemplos listos para usar</div>
+    <div class="grim-text">Hacé clic en <b>Aplicar</b> para cargar el ejemplo en el editor.</div>
+</div>
+${[
+    { title:'Doble Disparo', code:'OnCast:\n  SpawnProjectile damage=6 count=2 spread=10', tip:'Simple y barato. Buen inicio.' },
+    { title:'Quemadura al pegar', code:'OnHit:\n  ApplyStatus type=burn damage=6 duration=2 chance=35', tip:'35% de quemar al golpear.' },
+    { title:'Explosión rara', code:'OnHit:\n  Explode radius=90 damage=22 chance=15', tip:'15% de explotar. Muy destructivo.' },
+    { title:'Escudo defensivo', code:'OnDamageTaken:\n  Shield amount=22 duration=4 chance=40', tip:'40% de generar escudo al recibir daño.' },
+    { title:'Combo agresivo', code:'OnCast:\n  SpawnProjectile damage=8 count=3 spread=15\nOnHit:\n  ApplyStatus type=slow duration=1 amount=0.5 chance=50', tip:'Dispara 3 proyectiles que ralentizan.' },
+    { title:'Cazador de kills', code:'OnKill:\n  Heal amount=8\n  SpawnProjectile damage=10 count=2 spread=20', tip:'Al matar: cura y dispara más proyectiles.' },
+].map(e=>`
+<div class="grim-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="grim-section-title" style="margin-bottom:0">${e.title}</div>
+        <button class="grim-apply-btn" data-code="${encodeURIComponent(e.code)}">✦ Aplicar</button>
+    </div>
+    <div class="grim-code">${e.code}</div>
+    <div class="grim-tip">💡 ${e.tip}</div>
+</div>`).join('')}`);
+
+        } else {
+            // ENGLISH pages
+            makeGrimPage('index', `
+<div class="grim-section">
+    <div class="grim-section-title">How does the Forge work?</div>
+    <div class="grim-text">The Forge lets you write a small <b>magic script</b> your rune will execute during combat.<br>Think of it as instructions: <b>"when X happens, do Y"</b>.</div>
+    <div class="grim-tip">💡 Start with an <b>Event</b> (when?), then add <b>Actions</b> (what happens?).</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Quick steps</div>
+    <div class="grim-code">1. Pick an event:  OnCast:
+2. Write an indented action:
+     SpawnProjectile damage=8 count=2
+3. Click "Program" ✓</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Sections</div>
+    <button class="grim-link-btn" data-go="events">📌 Events — when does it trigger?</button>
+    <button class="grim-link-btn" data-go="actions">🧩 Actions — what does it do?</button>
+    <button class="grim-link-btn" data-go="rules">🛡 Rules — limits and conditions</button>
+    <button class="grim-link-btn" data-go="examples">✨ Examples — ready templates</button>
+</div>`);
+
+            makeGrimPage('events', `
+<div class="grim-section">
+    <div class="grim-section-title">Available Events</div>
+    <div class="grim-text">Events are written <b>without indentation</b>, followed by a colon. Actions go <b>indented</b> below (2 spaces or Tab).</div>
+</div>
+${[
+    { id:'OnCast', ico:'⚡', desc:'When you shoot. Great for extra projectiles.' },
+    { id:'OnHit',  ico:'💥', desc:'When your projectile hits an enemy. Powerful but costs more.' },
+    { id:'OnKill', ico:'💀', desc:'When you kill an enemy.' },
+    { id:'OnRoomClear', ico:'🏆', desc:'When all enemies in the room are cleared. Good for shields/heals.' },
+    { id:'OnDamageTaken', ico:'🩹', desc:'When you take damage. Useful for defensive reactions.' },
+].map(e=>`
+<div class="grim-event-card">
+    <div class="grim-card-title">${e.ico} ${e.id}</div>
+    <div class="grim-card-desc">${e.desc}</div>
+    <div class="grim-code">${e.id}:\n  SpawnProjectile damage=6 count=1</div>
+</div>`).join('')}`);
+
+            makeGrimPage('actions', `
+<div class="grim-section">
+    <div class="grim-section-title">Commands (Actions)</div>
+    <div class="grim-text">Write them <b>indented</b> under an event. Combine multiple. Out-of-range values will fail validation.</div>
+</div>
+${[
+    { id:'SpawnProjectile', ico:'🏹', desc:'Fire extra projectiles in your aim direction.' },
+    { id:'ApplyStatus',     ico:'🔥', desc:'Apply an effect: burn, poison, or slow.' },
+    { id:'Explode',         ico:'💣', desc:'Explosion damaging all enemies near the target.' },
+    { id:'Heal',            ico:'❤️', desc:'Instantly heal yourself.' },
+    { id:'Shield',          ico:'🛡', desc:'Create a temporary shield that absorbs damage.' },
+    { id:'Chain',           ico:'⛓', desc:'Damage jumps to the nearest enemy to the target.' },
+    { id:'Bounce',          ico:'🔄', desc:'Projectile bounces off enemies or walls.' },
+    { id:'Pierce',          ico:'➡', desc:'Projectile passes through enemies.' },
+    { id:'Summon',          ico:'👻', desc:'Summon a temporary ally (wisp, stalker, brute, turret).' },
+].map(a=>`
+<div class="grim-action-card">
+    <div class="grim-card-title">${a.ico} ${a.id}</div>
+    <div class="grim-card-desc">${a.desc}</div>
+    <div class="grim-card-params">Params: ${capLine(a.id) || '—'}</div>
+</div>`).join('')}
+<div class="grim-tip">💡 <b>chance=</b> adds probability (0-100). <b>chance=50</b> = 50% chance to trigger.</div>`);
+
+            makeGrimPage('rules', `
+<div class="grim-section">
+    <div class="grim-section-title">System Limits</div>
+    <div class="grim-code">Max lines:    ${MAX_LINES}
+CPU/event:    ${MAX_CPU}
+Max repeat:   ${MAX_REPEAT}
+Spawns/sec:   ${MAX_SPAWNS}</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Conditions (if / else)</div>
+    <div class="grim-text">Use <b>if</b> to add conditions. Variables: <b>mana, cooldown, stacks, chance, range, damage, count</b></div>
+    <div class="grim-code">OnHit:
+  if chance &lt; 25:
+    Explode radius=80 damage=18
+  else:
+    ApplyStatus type=burn damage=5 duration=2</div>
+    <div class="grim-tip">💡 <b>chance &lt; 25</b> means "25% probability to trigger"</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Loops (repeat)</div>
+    <div class="grim-code">OnCast:
+  repeat 3:
+    SpawnProjectile damage=4 count=1 spread=8</div>
+</div>
+<div class="grim-section">
+    <div class="grim-section-title">Dynamic Pricing</div>
+    <div class="grim-text">Cost rises with power: <b>more damage, more projectiles, frequent events, and repeats</b> all increase the price. Updates in real-time as you type.</div>
+</div>`);
+
+            makeGrimPage('examples', `
+<div class="grim-section">
+    <div class="grim-section-title">Ready-to-use Examples</div>
+    <div class="grim-text">Click <b>Apply</b> to load the example into the editor.</div>
+</div>
+${[
+    { title:'Double Shot',     code:'OnCast:\n  SpawnProjectile damage=6 count=2 spread=10', tip:'Simple and cheap. Great starter.' },
+    { title:'Burn on Hit',     code:'OnHit:\n  ApplyStatus type=burn damage=6 duration=2 chance=35', tip:'35% to burn on hit.' },
+    { title:'Rare Explosion',  code:'OnHit:\n  Explode radius=90 damage=22 chance=15', tip:'15% to explode. Very destructive.' },
+    { title:'Defensive Shield',code:'OnDamageTaken:\n  Shield amount=22 duration=4 chance=40', tip:'40% shield on taking damage.' },
+    { title:'Aggressive Combo',code:'OnCast:\n  SpawnProjectile damage=8 count=3 spread=15\nOnHit:\n  ApplyStatus type=slow duration=1 amount=0.5 chance=50', tip:'3 slowing projectiles per shot.' },
+    { title:'Kill Reward',     code:'OnKill:\n  Heal amount=8\n  SpawnProjectile damage=10 count=2 spread=20', tip:'On kill: heal and fire extra shots.' },
+].map(e=>`
+<div class="grim-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="grim-section-title" style="margin-bottom:0">${e.title}</div>
+        <button class="grim-apply-btn" data-code="${encodeURIComponent(e.code)}">✦ Apply</button>
+    </div>
+    <div class="grim-code">${e.code}</div>
+    <div class="grim-tip">💡 ${e.tip}</div>
+</div>`).join('')}`);
+        }
+
+        // Init tabs
+        function showGrimPage(key) {
+            grimBody.querySelectorAll('.forge-grim-page').forEach(p => p.classList.toggle('active', p.dataset.page === key));
+            grimTabsEl.querySelectorAll('.forge-grim-tab').forEach(t => t.classList.toggle('active', t.dataset.page === key));
+        }
+
+        grimPages.forEach((p, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'forge-grim-tab' + (i === 0 ? ' active' : '');
+            btn.textContent = p.label;
+            btn.dataset.page = p.key;
+            btn.addEventListener('click', () => showGrimPage(p.key));
+            grimTabsEl.append(btn);
+        });
+        showGrimPage('index');
+
+        // Link buttons and Apply buttons inside grimoire
+        grimBody.addEventListener('click', e => {
+            const linkBtn = e.target.closest('.grim-link-btn');
+            if (linkBtn && linkBtn.dataset.go) { showGrimPage(linkBtn.dataset.go); return; }
+            const applyBtn = e.target.closest('.grim-apply-btn');
+            if (applyBtn && applyBtn.dataset.code) {
+                editor.value = decodeURIComponent(applyBtn.dataset.code);
+                updateStatus();
+                // Flash the editor to confirm
+                editor.style.transition = 'border-color 0.1s';
+                editor.style.borderColor = 'rgba(80,220,120,0.8)';
+                setTimeout(() => { editor.style.borderColor = ''; }, 400);
+            }
+        });
+
+
+        // --- Footer ---
+        const footer = document.createElement('div');
+        footer.className = 'forge-footer';
+
+        const btnCancel = document.createElement('button');
+        btnCancel.className = 'forge-btn forge-btn-cancel';
+        btnCancel.textContent = T.cancel;
+
+        const btnSave = document.createElement('button');
+        btnSave.className = 'forge-btn forge-btn-program';
+        btnSave.textContent = baseCost > 0 ? `${T.program} (${baseCost} 💰)` : `${T.program} (${T.free})`;
+
+        function updateBtnCost(total) {
+            btnSave.textContent = total > 0 ? `${T.program} (${total} 💰)` : `${T.program} (${T.free})`;
+        }
+
+        footer.append(btnCancel, btnSave);
+
+        // Assemble
+        panel.append(header, body, footer);
+        modal.append(panel);
+
+        const self = this;
+        const close = () => { modal.remove(); self.paused = false; };
+
+        btnCancel.addEventListener('click', close);
+        // Only close if mousedown AND mouseup were both on the backdrop (not a text drag)
+        let _mousedownOnBackdrop = false;
+        modal.addEventListener('mousedown', e => { _mousedownOnBackdrop = (e.target === modal); });
+        modal.addEventListener('click', e => { if (e.target === modal && _mousedownOnBackdrop) close(); });
+
+        btnSave.addEventListener('click', () => {
+            const src = editor.value;
+            if (!src.trim()) {
+                status.className = 'forge-status err';
+                status.textContent = T.errEmpty;
+                return;
+            }
+            if (!window.RuneScript) return;
+            const r = RuneScript.compile(src);
+            if (!r.ok) {
+                status.className = 'forge-status err';
+                status.textContent = `✗ ${r.error}`;
+                return;
+            }
+            const a = RuneScript.analyze(src);
+            if (!a.ok) {
+                status.className = 'forge-status err';
+                status.textContent = `✗ ${a.error}`;
+                return;
+            }
+            const totalCost = baseCost + (a.extraCost || 0);
+            if (totalCost > 0 && (player.gold || 0) < totalCost) {
+                status.className = 'forge-status err';
+                status.textContent = T.errGold(totalCost);
+                return;
+            }
+            if (totalCost > 0) player.gold = Math.max(0, (player.gold || 0) - totalCost);
+            const rune = player.runes[selectedRuneIdx];
+            if (rune) {
+                rune.programmed = true;
+                rune.script = r.program;
+                rune.scriptRaw = src;
+                rune.icon = '🟪';
+                rune.name = isEs ? 'Runa Programada' : 'Programmed Rune';
+                rune.desc = isEs ? 'Ejecuta tu pseudo-código.' : 'Executes your script.';
+            }
+            ev.used = true;
+            if (typeof self.onForgeUsed === 'function') self.onForgeUsed();
+            if (window.UI && typeof UI.toast === 'function') UI.toast(T.successMsg, 'success');
+            close();
+        });
+
+        document.body.appendChild(modal);
+        updateStatus();
+        editor.focus();
+    },
+
+    _showForgeNoRuneMsg() {
+        const lang = (window.i18n && window.i18n.currentLang) ? window.i18n.currentLang : 'en';
+        const isEs = lang === 'es';
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:linear-gradient(160deg,#0b1421,#080f1c);border:1px solid rgba(80,140,255,0.3);border-radius:14px;padding:32px 40px;color:#ddd;font-family:"Share Tech Mono",monospace;text-align:center;max-width:380px;box-shadow:0 0 40px rgba(60,120,255,0.12);';
+        box.innerHTML = `
+            <div style="font-size:2em;margin-bottom:12px">⚒</div>
+            <h3 style="color:#7ec8ff;margin:0 0 14px;font-family:Cinzel,serif;font-size:1em;letter-spacing:0.1em">${isEs ? 'FORJA' : 'FORGE'}</h3>
+            <p style="color:#8aaac8;margin:0 0 20px;font-size:0.82em;line-height:1.6">${isEs ? 'Necesitás una <strong style="color:#a0d0ff">Runa Vacía</strong> para usar la Forja.<br>Las runas vacías se consiguen en cofres y tras vencer jefes.' : 'You need an <strong style="color:#a0d0ff">Empty Rune</strong> to use the Forge.<br>Empty runes are found in chests and after defeating bosses.'}</p>`;
+        const btn = document.createElement('button');
+        btn.textContent = isEs ? 'Entendido' : 'Got it';
+        btn.style.cssText = 'background:rgba(20,50,100,0.5);color:#7ec8ff;border:1px solid rgba(80,140,255,0.4);border-radius:9px;padding:8px 24px;cursor:pointer;font-family:inherit;font-size:0.85em;transition:all 0.2s;';
+        btn.addEventListener('mouseover', () => { btn.style.background = 'rgba(40,80,160,0.5)'; });
+        btn.addEventListener('mouseout', () => { btn.style.background = 'rgba(20,50,100,0.5)'; });
+        btn.addEventListener('click', () => modal.remove());
+        box.append(btn);
+        modal.append(box);
+        modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
     }
 };
 

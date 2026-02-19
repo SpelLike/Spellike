@@ -17,7 +17,6 @@ const RuneDatabase = {
         { id: 'mana_sip', icon: '🥤', manaRegen: 0.15 },
         { id: 'reach', icon: '📏', rangeBonus: 0.08 },
         { id: 'twin_spark', icon: '⚡', damageBonus: 1, speedBonus: 10 },
-        { id: 'frugal', icon: '💧', manaCost: -0.5, damageMultiplier: 0.95 },
         { id: 'arcane_edge', icon: '🗡️', damageBonus: 2 },
         { id: 'glimmer', icon: '✨', manaBonus: 1, damageMultiplier: 1.05 }
     ],
@@ -35,7 +34,6 @@ const RuneDatabase = {
         { id: 'overpressure', icon: '🧯', speedBonus: 35 },
         { id: 'cold_bite', icon: '🥶', effect: 'slow' },
         { id: 'toxic_bite', icon: '☠️', effect: 'poison' },
-        { id: 'efficient_cast', icon: '🧠', manaCost: -1, damageMultiplier: 0.9 },
         { id: 'arcane_rhythm', icon: '🎵', fireRateBonus: 0.20 },
         { id: 'glass_cannon', icon: '🪞', damageMultiplier: 1.35, damageTakenMultiplier: 1.10 }
     ],
@@ -91,12 +89,59 @@ function getEmptyRune() {
     return r;
 }
 
+// IDs of PURE fire-rate runes (only give fireRateBonus, nothing else)
+const PURE_FIRE_RATE_RUNES = new Set(['quick_hands', 'arcane_rhythm']);
+// IDs of PURE projectile-speed runes (only give speedBonus, nothing else)
+const PURE_PROJ_SPEED_RUNES = new Set(['velocity', 'overpressure']);
+
+// Check if player has hit a cap — reads from window.Game.player
+function isFireRateCapped() {
+    const p = window.Game && window.Game.player;
+    if (!p) return false;
+    let bonus = 0;
+    for (const r of (p.runes || [])) { if (r && typeof r.fireRateBonus === 'number') bonus += r.fireRateBonus; }
+    if (p.synergyBonuses && p.synergyBonuses.fireRateBonus) bonus += p.synergyBonuses.fireRateBonus;
+    return bonus >= 0.60; // >= 150% fire rate
+}
+function isProjSpeedCapped() {
+    const p = window.Game && window.Game.player;
+    if (!p) return false;
+    let spd = p.projectileSpeed || 500;
+    for (const r of (p.runes || [])) { if (r && typeof r.speedBonus === 'number') spd *= (1 + r.speedBonus / 100); }
+    if (p.synergyBonuses && p.synergyBonuses.speedBonus) spd *= (1 + p.synergyBonuses.speedBonus / 100);
+    return spd >= (p.projectileSpeed || 500) * 2.30; // >= 130% over base
+}
+
 function getRandomRune(rarity) {
-    const runes = RuneDatabase[rarity];
-    if (!runes || runes.length === 0) return null;
-    const rune = { ...Utils.randomChoice(runes) };
+    const allRunes = RuneDatabase[rarity];
+    if (!allRunes || allRunes.length === 0) return null;
+
+    // Filter out pure capped runes and maxed-stack runes
+    const fireCapped = isFireRateCapped();
+    const speedCapped = isProjSpeedCapped();
+    const player = window.Game && window.Game.player;
+    let pool = allRunes;
+    {
+        const filtered = allRunes.filter(r => {
+            if (fireCapped && PURE_FIRE_RATE_RUNES.has(r.id)) return false;
+            if (speedCapped && PURE_PROJ_SPEED_RUNES.has(r.id)) return false;
+            // Respect maxStacks: filter out runes player already has max of
+            if (typeof r.maxStacks === 'number' && r.maxStacks > 0 && player) {
+                const count = (player.runes || []).filter(eq => eq && eq.id === r.id).length;
+                if (count >= r.maxStacks) return false;
+            }
+            return true;
+        });
+        if (filtered.length > 0) pool = filtered;
+    }
+
+    const rune = { ...Utils.randomChoice(pool) };
     rune.rarity = rarity;
     rune.type = 'rune';
+    // If capped stat, zero it out on mixed runes
+    if (fireCapped && typeof rune.fireRateBonus === 'number') rune.fireRateBonus = 0;
+    if (speedCapped && typeof rune.speedBonus === 'number') rune.speedBonus = 0;
+
     // Add translations
     if (window.i18n) {
         const trans = window.i18n.rune(rune.id);

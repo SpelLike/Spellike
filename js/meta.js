@@ -160,27 +160,12 @@
             if (u.potion_belt === undefined) u.potion_belt = 1;
             if (this.data.essence === undefined) this.data.essence = 0;
             this.save();
+            // Initialize Skill Tree (new system, replaces old upgrade shop)
+            if (window.SkillTree && typeof SkillTree.init === 'function') SkillTree.init();
         },
 
         // -------- Essence + Upgrades --------
-        getEssence() {
-            return Math.max(0, Math.floor(this.data.essence || 0));
-        },
-
-        addEssence(amount) {
-            const n = Math.max(0, Math.floor(amount || 0));
-            if (!n) return;
-            this.data.essence = this.getEssence() + n;
-            this.save();
-        },
-
-        getUpgradeLevel(key) {
-            const u = this.data.upgrades || {};
-            return Math.max(1, Math.floor(u[key] || 1));
-        },
-
         getUpgradeMax(key) {
-            if (key === 'shop_slots') return 5;
             if (key === 'shop_rerolls') return 4;
             if (key === 'luck') return 4;
             if (key === 'dash') return 3;
@@ -340,33 +325,33 @@
         },
 
         // Values derived from levels
+        // ── SKILL TREE INTEGRATION ──────────────────────────────────────
+        // These functions now use Skill Tree bonuses instead of old upgrade levels.
+        // The old upgrade data is kept for backward-compat but no longer modified.
         getShopSlots() {
-            const lvl = Utils.clamp ? Utils.clamp(this.getUpgradeLevel('shop_slots'), 1, 5) : clamp(this.getUpgradeLevel('shop_slots'), 1, 5);
-            return 3 + lvl; // 4..8
+            const treeBonus = (window.SkillTree) ? SkillTree.getShopSlotsBonus() : 0;
+            return Math.min(8, 4 + treeBonus); // base 4 + tree
         },
         getShopRerolls() {
-            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('shop_rerolls'), 1, 4) : clamp(this.getUpgradeLevel('shop_rerolls'), 1, 4));
-            return lvl; // 1..4
+            const treeBonus = (window.SkillTree) ? SkillTree.getShopRerollsBonus() : 0;
+            return Math.min(4, Math.max(1, 1 + treeBonus));
         },
         getLuckPct() {
-            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('luck'), 1, 4) : clamp(this.getUpgradeLevel('luck'), 1, 4));
-            return lvl * 0.05; // 0.05..0.20
+            const treeBonus = (window.SkillTree) ? SkillTree.getLuckBonus() : 0;
+            return Math.min(0.30, Math.max(0.02, 0.02 + treeBonus));
         },
         getDashCharges() {
-            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('dash'), 1, 3) : clamp(this.getUpgradeLevel('dash'), 1, 3));
-            return lvl; // 1..3
+            const treeBonus = (window.SkillTree) ? SkillTree.getDashChargesBonus() : 0;
+            return Math.min(3, Math.max(1, 1 + treeBonus));
         },
         getStartGold() {
-            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('start_gold'), 1, 4) : clamp(this.getUpgradeLevel('start_gold'), 1, 4));
-            return Math.max(0, (lvl - 1) * 50);
+            return (window.SkillTree) ? SkillTree.getStartGoldBonus() : 0;
         },
         getMaxHpBonus() {
-            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('vitality'), 1, 4) : clamp(this.getUpgradeLevel('vitality'), 1, 4));
-            return Math.max(0, (lvl - 1) * 5);
+            return (window.SkillTree) ? SkillTree.getMaxHpBonus() : 0;
         },
         getStartPotions() {
-            const lvl = (Utils.clamp ? Utils.clamp(this.getUpgradeLevel('potion_belt'), 1, 3) : clamp(this.getUpgradeLevel('potion_belt'), 1, 3));
-            return Math.max(0, (lvl - 1) * 1);
+            return (window.SkillTree) ? SkillTree.getStartPotionsBonus() : 0;
         },
 
         // Pricing (increases per level)
